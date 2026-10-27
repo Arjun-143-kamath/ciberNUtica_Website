@@ -1,0 +1,122 @@
+@import "tailwindcss";
+
+:root {
+  --background: #060606;
+  --foreground: #F5F5F5;
+  --cyber-yellow: #FCEE09;
+  --cyber-yellow-glow: rgba(252, 238, 9, 0.25);
+  --cyber-border: rgba(252, 238, 9, 0.2);
+  --cyber-border-active: #FCEE09;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  overflow-x: hidden;
+  background-image: 
+    radial-gradient(rgba(252, 238, 9, 0.05) 1px, transparent 0),
+    linear-gradient(to bottom, rgba(6, 6, 6, 0.95), rgba(6, 6, 6, 1));
+  background-size: 32px 32px, 100% 100%;
+  background-attachment: fixed;
+}
+
+/* Cyber Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0a0a0a;
+}
+::-webkit-scrollbar-thumb {
+  background: #FCEE09;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #ffe500;
+}
+
+/* Custom Tactical Box Utility */
+.cyber-card {
+  position: relative;
+  background: rgba(10, 10, 10, 0.85);
+  border: 1px solid rgba(252, 238, 9, 0.22);
+  backdrop-filter: blur(8px);
+}
+
+.cyber-card:hover {
+  border-color: rgba(252, 238, 9, 0.6);
+  box-shadow: 0 0 25px rgba(252, 238, 9, 0.08);
+}
+
+/* Corner Crosshair Accents */
+.cyber-crosshair::before,
+.cyber-crosshair::after {
+  content: "+";
+  position: absolute;
+  font-family: monospace;
+  font-size: 14px;
+  color: #FCEE09;
+  line-height: 1;
+  pointer-events: none;
+}
+.cyber-crosshair::before {
+  top: -7px;
+  left: -5px;
+}
+.cyber-crosshair::after {
+  bottom: -7px;
+  right: -5px;
+}
+
+/* Glowing text */
+.text-cyber-glow {
+  text-shadow: 0 0 12px rgba(252, 238, 9, 0.5);
+}
+
+/* Tactical Button */
+.cyber-btn-yellow {
+  background: #FCEE09;
+  color: #000000;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border: 1px solid #FCEE09;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.cyber-btn-yellow:hover {
+  background: #ffffff;
+  color: #000000;
+  box-shadow: 0 0 20px rgba(252, 238, 9, 0.5);
+  transform: translateY(-1px);
+}
+
+.cyber-btn-outline {
+  background: transparent;
+  color: #FCEE09;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border: 1px solid rgba(252, 238, 9, 0.4);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.cyber-btn-outline:hover {
+  border-color: #FCEE09;
+  background: rgba(252, 238, 9, 0.1);
+  box-shadow: 0 0 15px rgba(252, 238, 9, 0.2);
+}
+
+/* Scanline Overlay */
+.scanlines {
+  background: linear-gradient(
+    rgba(18, 16, 16, 0) 50%, 
+    rgba(0, 0, 0, 0.25) 50%
+  ), linear-gradient(
+    90deg,
+    rgba(255, 0, 0, 0.03),
+    rgba(0, 255, 0, 0.01),
+    rgba(0, 0, 255, 0.03)
+  );
+  background-size: 100% 3px, 6px 100%;
+  pointer-events: none;
+}

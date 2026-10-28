@@ -22,7 +22,7 @@ import {
   RotateCcw,
   X
 } from 'lucide-react';
-import { Challenge, ChallengeCategory, ChallengeType, FlagType } from '@/lib/types';
+import { Challenge, ChallengeCategory, ChallengeType, EventType, FlagType } from '@/lib/types';
 
 export default function AdminPortalPage() {
   const { 
@@ -39,15 +39,17 @@ export default function AdminPortalPage() {
     isScoreboardFrozen, 
     setIsScoreboardFrozen,
     blogs,
+    addBlogPost,
     deleteBlogPost
   } = useCTF();
 
-  const [activeTab, setActiveTab] = useState<'challenges' | 'events' | 'submissions' | 'blogs'>('challenges');
+  const [activeTab, setActiveTab] = useState<'events' | 'submissions' | 'blogs'>('events');
   const ctfEvents = events.filter(event => event.type === 'CTF');
   const [selectedCtfEventId, setSelectedCtfEventId] = useState('');
   const selectedCtfEvent = ctfEvents.find(event => event.id === selectedCtfEventId) ?? ctfEvents[0];
   const eventChallenges = challenges.filter(challenge => challenge.eventId === selectedCtfEvent?.id);
-  const [newCtfEvent, setNewCtfEvent] = useState({ title: '', description: '', date: '', endDate: '', startTime: '09:00', endTime: '17:00', isPublished: false });
+  const [newEvent, setNewEvent] = useState({ kind: 'GENERAL' as 'CTF' | 'GENERAL', type: 'SESSION' as EventType, title: '', description: '', location: '', date: '', endDate: '', startTime: '09:00', endTime: '17:00', isPublished: false });
+  const [newBlog, setNewBlog] = useState({ title: '', slug: '', summary: '', content: '', category: 'Vulnerabilities', authorName: 'Command Staff', authorRole: 'Command Staff', readTime: '5 min read' });
 
   // New challenge form state
   const [showAddChalModal, setShowAddChalModal] = useState(false);
@@ -138,12 +140,22 @@ export default function AdminPortalPage() {
     });
   };
 
-  const handleCreateCtfEvent = async (e: React.FormEvent) => {
+  const handleCreateEvent = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await addEvent({ title: newCtfEvent.title, slug: '', description: newCtfEvent.description, type: 'CTF', location: '', date: newCtfEvent.date, startDate: newCtfEvent.date, endDate: newCtfEvent.endDate || newCtfEvent.date, startTime: `${newCtfEvent.startTime} UTC`, endTime: `${newCtfEvent.endTime} UTC`, isPublished: newCtfEvent.isPublished, isLiveCTF: false });
-      setNewCtfEvent({ title: '', description: '', date: '', endDate: '', startTime: '09:00', endTime: '17:00', isPublished: false });
-    } catch (error) { window.alert(error instanceof Error ? error.message : 'Unable to create CTF event.'); }
+      await addEvent({ title: newEvent.title, slug: '', description: newEvent.description, type: newEvent.kind === 'CTF' ? 'CTF' : newEvent.type, location: newEvent.location, date: newEvent.date, startDate: newEvent.date, endDate: newEvent.kind === 'CTF' ? (newEvent.endDate || newEvent.date) : newEvent.date, startTime: `${newEvent.startTime} UTC`, endTime: `${newEvent.endTime} UTC`, isPublished: newEvent.isPublished, isLiveCTF: false });
+      setNewEvent({ kind: 'GENERAL', type: 'SESSION', title: '', description: '', location: '', date: '', endDate: '', startTime: '09:00', endTime: '17:00', isPublished: false });
+    } catch (error) { window.alert(error instanceof Error ? error.message : 'Unable to create event.'); }
+  };
+
+  const handleCreateBlog = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await addBlogPost({ ...newBlog, slug: newBlog.title.toLowerCase().replace(/[^a-z0-9]+/g, '-') });
+      setNewBlog({ title: '', slug: '', summary: '', content: '', category: 'Vulnerabilities', authorName: 'Command Staff', authorRole: 'Command Staff', readTime: '5 min read' });
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'Unable to publish blog post.');
+    }
   };
 
   const handleSaveEditedChallenge = async (e: React.FormEvent) => {
@@ -231,14 +243,14 @@ export default function AdminPortalPage() {
       {/* Tabs */}
       <div className="flex flex-wrap items-center gap-2 border-b border-[#FCEE09]/20 pb-4 text-xs font-bold">
         <button
-          onClick={() => setActiveTab('challenges')}
+          onClick={() => setActiveTab('events')}
           className={`px-4 py-2 border transition ${
-            activeTab === 'challenges'
+            activeTab === 'events'
               ? 'border-[#FCEE09] bg-[#FCEE09] text-black'
               : 'border-neutral-800 bg-neutral-950 text-neutral-400 hover:text-white'
           }`}
         >
-          CTF EVENTS & CHALLENGES ({ctfEvents.length})
+          EVENTS ({events.length})
         </button>
 
         <button
@@ -249,18 +261,7 @@ export default function AdminPortalPage() {
               : 'border-neutral-800 bg-neutral-950 text-neutral-400 hover:text-white'
           }`}
         >
-          ANTI-CHEAT AUDIT LOG ({submissions.length})
-        </button>
-
-        <button
-          onClick={() => setActiveTab('events')}
-          className={`px-4 py-2 border transition ${
-            activeTab === 'events'
-              ? 'border-[#FCEE09] bg-[#FCEE09] text-black'
-              : 'border-neutral-800 bg-neutral-950 text-neutral-400 hover:text-white'
-          }`}
-        >
-          OPERATIONS & CTF TOGGLES ({events.length})
+          ANTI-CHEAT LOGS ({submissions.length})
         </button>
 
         <button
@@ -271,38 +272,64 @@ export default function AdminPortalPage() {
               : 'border-neutral-800 bg-neutral-950 text-neutral-400 hover:text-white'
           }`}
         >
-          BLOG DISPATCHES ({blogs.length})
+          BLOG POSTS ({blogs.length})
         </button>
       </div>
 
       {/* =========================================================================
           TAB 1: CTF CHALLENGE MANAGEMENT (Static & Dynamic Scoring)
           ========================================================================= */}
-      {activeTab === 'challenges' && (
+      {activeTab === 'events' && (
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-white uppercase flex items-center gap-2">
               <Flame className="w-4 h-4 text-[#FCEE09]" />
-              <span>CTF EVENT WORKSPACE</span>
+              <span>CTF EVENTS & CHALLENGES</span>
             </h2>
 
             <button disabled={!selectedCtfEvent} onClick={() => setShowAddChalModal(true)} className="cyber-btn-yellow px-4 py-2 text-xs flex items-center gap-2 disabled:opacity-40">
               <Plus className="w-4 h-4" />
-              <span>ADD TO EVENT</span>
+              <span>ADD CHALLENGE</span>
             </button>
           </div>
 
-          <form onSubmit={handleCreateCtfEvent} className="cyber-card grid grid-cols-1 md:grid-cols-6 gap-3 p-4 border border-[#FCEE09]/25">
-            <div className="md:col-span-2"><label className="block mb-1 text-[10px] text-neutral-400">NEW CTF EVENT</label><input required maxLength={160} placeholder="Event name" value={newCtfEvent.title} onChange={e => setNewCtfEvent({ ...newCtfEvent, title: e.target.value })} className="w-full bg-black border border-neutral-800 p-2 text-white" /></div>
-            <div className="md:col-span-2"><label className="block mb-1 text-[10px] text-neutral-400">DESCRIPTION</label><input required placeholder="What is this CTF about?" value={newCtfEvent.description} onChange={e => setNewCtfEvent({ ...newCtfEvent, description: e.target.value })} className="w-full bg-black border border-neutral-800 p-2 text-white" /></div>
-            <div><label className="block mb-1 text-[10px] text-neutral-400">DATE (UTC)</label><input required type="date" value={newCtfEvent.date} onChange={e => setNewCtfEvent({ ...newCtfEvent, date: e.target.value })} className="w-full bg-black border border-neutral-800 p-2 text-white" /></div>
-            <div><label className="block mb-1 text-[10px] text-neutral-400">END DATE (UTC)</label><input type="date" min={newCtfEvent.date} value={newCtfEvent.endDate} onChange={e => setNewCtfEvent({ ...newCtfEvent, endDate: e.target.value })} className="w-full bg-black border border-neutral-800 p-2 text-white" /></div>
-            <div className="grid grid-cols-2 gap-2"><div><label className="block mb-1 text-[10px] text-neutral-400">START</label><input required type="time" value={newCtfEvent.startTime} onChange={e => setNewCtfEvent({ ...newCtfEvent, startTime: e.target.value })} className="w-full bg-black border border-neutral-800 p-2 text-white" /></div><div><label className="block mb-1 text-[10px] text-neutral-400">END</label><input required type="time" value={newCtfEvent.endTime} onChange={e => setNewCtfEvent({ ...newCtfEvent, endTime: e.target.value })} className="w-full bg-black border border-neutral-800 p-2 text-white" /></div></div>
-            <label className="md:col-span-5 flex items-center gap-2 text-[11px] text-neutral-300"><input type="checkbox" checked={newCtfEvent.isPublished} onChange={e => setNewCtfEvent({ ...newCtfEvent, isPublished: e.target.checked })} /> Visible to participants when created</label>
-            <button className="cyber-btn-yellow px-3 py-2 text-xs">INITIATE CTF</button>
+          <p className="text-xs leading-relaxed text-neutral-400">
+            Create a CTF, session, or workshop here. Once you create a CTF, select it below and use <span className="text-[#FCEE09]">ADD CHALLENGE</span> to attach challenges.
+          </p>
+
+          <form onSubmit={handleCreateEvent} className="cyber-card space-y-4 border border-[#FCEE09]/25 p-5">
+            <h3 className="text-sm font-bold uppercase text-[#FCEE09]">CREATE EVENT</h3>
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="text-[10px] text-neutral-400">EVENT KIND
+                <select value={newEvent.kind} onChange={e => setNewEvent({ ...newEvent, kind: e.target.value as 'CTF' | 'GENERAL', isPublished: e.target.value === 'GENERAL' })} className="mt-1 w-full bg-black border border-neutral-800 p-2 text-xs text-white">
+                  <option value="GENERAL">GENERAL EVENT — SESSION / WORKSHOP / TALK</option><option value="CTF">CTF COMPETITION — WITH CHALLENGES</option>
+                </select>
+              </label>
+              <label className="text-[10px] text-neutral-400">EVENT TITLE
+                <input required maxLength={160} value={newEvent.title} onChange={e => setNewEvent({ ...newEvent, title: e.target.value })} placeholder={newEvent.kind === 'CTF' ? 'Winter CTF 2026' : 'Security workshop'} className="mt-1 w-full bg-black border border-neutral-800 p-2 text-xs text-white" />
+              </label>
+              {newEvent.kind === 'GENERAL' && <label className="text-[10px] text-neutral-400">GENERAL EVENT TYPE
+                <select value={newEvent.type} onChange={e => setNewEvent({ ...newEvent, type: e.target.value as EventType })} className="mt-1 w-full bg-black border border-neutral-800 p-2 text-xs text-white"><option value="SESSION">SESSION</option><option value="WORKSHOP">WORKSHOP</option><option value="TALK">SPEAKER TALK</option></select>
+              </label>}
+              <label className="text-[10px] text-neutral-400">{newEvent.kind === 'CTF' ? 'START DATE (UTC)' : 'DATE'}
+                <input required type="date" value={newEvent.date} onChange={e => setNewEvent({ ...newEvent, date: e.target.value, endDate: newEvent.endDate && newEvent.endDate < e.target.value ? e.target.value : newEvent.endDate })} className="mt-1 w-full bg-black border border-neutral-800 p-2 text-xs text-white" />
+              </label>
+              {newEvent.kind === 'CTF' ? <label className="text-[10px] text-neutral-400">END DATE (UTC)
+                <input required type="date" min={newEvent.date} value={newEvent.endDate || newEvent.date} onChange={e => setNewEvent({ ...newEvent, endDate: e.target.value })} className="mt-1 w-full bg-black border border-neutral-800 p-2 text-xs text-white" />
+              </label> : <label className="text-[10px] text-neutral-400">LOCATION / VENUE
+                <input required maxLength={200} value={newEvent.location} onChange={e => setNewEvent({ ...newEvent, location: e.target.value })} placeholder="Campus / online" className="mt-1 w-full bg-black border border-neutral-800 p-2 text-xs text-white" />
+              </label>}
+              <label className="text-[10px] text-neutral-400">START TIME (UTC)<input required type="time" value={newEvent.startTime} onChange={e => setNewEvent({ ...newEvent, startTime: e.target.value })} className="mt-1 w-full bg-black border border-neutral-800 p-2 text-xs text-white" /></label>
+              <label className="text-[10px] text-neutral-400">END TIME (UTC)<input required type="time" value={newEvent.endTime} onChange={e => setNewEvent({ ...newEvent, endTime: e.target.value })} className="mt-1 w-full bg-black border border-neutral-800 p-2 text-xs text-white" /></label>
+            </div>
+            <label className="block text-[10px] text-neutral-400">DESCRIPTION<textarea required maxLength={5000} rows={3} value={newEvent.description} onChange={e => setNewEvent({ ...newEvent, description: e.target.value })} className="mt-1 w-full bg-black border border-neutral-800 p-2 text-xs text-white" /></label>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <label className="flex items-center gap-2 text-xs text-neutral-300"><input type="checkbox" checked={newEvent.isPublished} onChange={e => setNewEvent({ ...newEvent, isPublished: e.target.checked })} /> Visible to users when created</label>
+              <button className="cyber-btn-yellow px-4 py-2 text-xs">{newEvent.kind === 'CTF' ? 'CREATE CTF EVENT' : 'CREATE GENERAL EVENT'}</button>
+            </div>
           </form>
 
-          {ctfEvents.length > 0 ? <div className="space-y-3"><label className="block text-xs text-neutral-400">SELECT CTF EVENT</label><select value={selectedCtfEvent?.id ?? ''} onChange={e => setSelectedCtfEventId(e.target.value)} className="w-full max-w-xl bg-black border border-[#FCEE09]/40 p-3 text-white">{ctfEvents.map(event => <option key={event.id} value={event.id}>{event.title} — {event.date}</option>)}</select><div className="flex flex-wrap items-center gap-3 text-xs text-neutral-400"><span>{selectedCtfEvent?.date} · {selectedCtfEvent?.startTime}–{selectedCtfEvent?.endTime}</span><button onClick={() => selectedCtfEvent && void updateEvent(selectedCtfEvent.id, { isPublished: !selectedCtfEvent.isPublished }).catch(() => window.alert('Unable to update event visibility.'))} className="px-3 py-1 border border-neutral-700 hover:border-[#FCEE09]">{selectedCtfEvent?.isPublished ? 'HIDE FROM USERS' : 'PUBLISH EVENT'}</button><button onClick={() => selectedCtfEvent && void updateEvent(selectedCtfEvent.id, { isLiveCTF: !selectedCtfEvent.isLiveCTF }).catch(() => window.alert('Unable to update event state.'))} className="px-3 py-1 border border-neutral-700 hover:border-emerald-400">{selectedCtfEvent?.isLiveCTF ? 'CLOSE SUBMISSIONS' : 'OPEN SUBMISSIONS'}</button></div></div> : <p className="border border-neutral-800 p-6 text-sm text-neutral-400">Create a CTF event above before adding challenges.</p>}
+          {ctfEvents.length > 0 ? <div className="space-y-3"><label className="block text-xs text-neutral-400">SELECT CTF EVENT</label><select value={selectedCtfEvent?.id ?? ''} onChange={e => setSelectedCtfEventId(e.target.value)} className="w-full max-w-xl bg-black border border-[#FCEE09]/40 p-3 text-white">{ctfEvents.map(event => <option key={event.id} value={event.id}>{event.title} — {event.date}</option>)}</select><div className="flex flex-wrap items-center gap-3 text-xs text-neutral-400"><span>{selectedCtfEvent?.date} · {selectedCtfEvent?.startTime}–{selectedCtfEvent?.endTime}</span><button onClick={() => selectedCtfEvent && void updateEvent(selectedCtfEvent.id, { isPublished: !selectedCtfEvent.isPublished }).catch(() => window.alert('Unable to update event visibility.'))} className="px-3 py-1 border border-neutral-700 hover:border-[#FCEE09]">{selectedCtfEvent?.isPublished ? 'HIDE FROM USERS' : 'PUBLISH EVENT'}</button><button onClick={() => selectedCtfEvent && void updateEvent(selectedCtfEvent.id, { isLiveCTF: !selectedCtfEvent.isLiveCTF }).catch(() => window.alert('Unable to update event state.'))} className="px-3 py-1 border border-neutral-700 hover:border-emerald-400">{selectedCtfEvent?.isLiveCTF ? 'CLOSE SUBMISSIONS' : 'OPEN SUBMISSIONS'}</button></div></div> : <p className="border border-neutral-800 p-6 text-sm text-neutral-400">Create a CTF from the event form below to start adding challenges.</p>}
 
           <div className="cyber-card border border-neutral-800 overflow-x-auto">
             <table className="w-full text-left text-xs">
@@ -484,17 +511,20 @@ export default function AdminPortalPage() {
         <div className="space-y-6">
           <h2 className="text-lg font-bold text-white uppercase flex items-center gap-2">
             <Calendar className="w-4 h-4 text-[#FCEE09]" />
-            <span>OPERATIONAL EVENT CONTROLS</span>
+            <span>EVENT MANAGEMENT</span>
           </h2>
+          <p className="max-w-3xl text-xs leading-relaxed text-neutral-400">
+            CTFs are competition events with challenges managed in the CTF workspace. Workshops, talks, and sessions are informational events and never require challenges.
+          </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {events.map((evt) => (
               <div key={evt.id} className="p-6 bg-neutral-950 border border-neutral-800 space-y-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] bg-[#FCEE09]/10 text-[#FCEE09] border border-[#FCEE09]/30 px-2 py-0.5">
-                    {evt.type}
+                  <span className={`text-[10px] border px-2 py-0.5 ${evt.type === 'CTF' ? 'bg-red-950 text-red-400 border-red-800' : 'bg-[#FCEE09]/10 text-[#FCEE09] border-[#FCEE09]/30'}`}>
+                    {evt.type === 'CTF' ? 'CTF COMPETITION' : `${evt.type} · GENERAL EVENT`}
                   </span>
-                  <button
+                  {evt.type === 'CTF' && <button
                     onClick={() => { void updateEvent(evt.id, { isLiveCTF: !evt.isLiveCTF }).catch(() => window.alert('Unable to update event.')); }}
                     className={`px-3 py-1 text-xs font-bold border transition ${
                       evt.isLiveCTF
@@ -503,7 +533,7 @@ export default function AdminPortalPage() {
                     }`}
                   >
                     {evt.isLiveCTF ? '● LIVE CTF ACTIVE' : '○ CTF MODE OFF'}
-                  </button>
+                  </button>}
                 </div>
 
                 <h3 className="font-bold text-white text-base">{evt.title}</h3>
@@ -532,8 +562,27 @@ export default function AdminPortalPage() {
         <div className="space-y-6">
           <h2 className="text-lg font-bold text-white uppercase flex items-center gap-2">
             <BookOpen className="w-4 h-4 text-[#FCEE09]" />
-            <span>PUBLISHED DISPATCHES</span>
+            <span>CREATE & MANAGE BLOG POSTS</span>
           </h2>
+
+          <form onSubmit={handleCreateBlog} className="cyber-card space-y-4 border border-[#FCEE09]/25 p-5">
+            <h3 className="text-sm font-bold uppercase text-[#FCEE09]">PUBLISH NEW POST</h3>
+            <label className="block text-[10px] text-neutral-400">TITLE
+              <input required maxLength={160} value={newBlog.title} onChange={e => setNewBlog({ ...newBlog, title: e.target.value })} className="mt-1 w-full bg-black border border-neutral-800 p-2 text-xs text-white" placeholder="Blog post title" />
+            </label>
+            <div className="grid gap-3">
+              <label className="text-[10px] text-neutral-400">CATEGORY
+                <select value={newBlog.category} onChange={e => setNewBlog({ ...newBlog, category: e.target.value })} className="mt-1 w-full bg-black border border-neutral-800 p-2 text-xs text-white"><option>Club Writeups</option><option>Cybernews</option><option>Vulnerabilities</option></select>
+              </label>
+            </div>
+            <label className="block text-[10px] text-neutral-400">SUMMARY
+              <textarea required maxLength={500} rows={2} value={newBlog.summary} onChange={e => setNewBlog({ ...newBlog, summary: e.target.value })} className="mt-1 w-full bg-black border border-neutral-800 p-2 text-xs text-white" placeholder="Short summary shown on the dispatch card" />
+            </label>
+            <label className="block text-[10px] text-neutral-400">ARTICLE CONTENT (MARKDOWN)
+              <textarea required maxLength={100000} rows={12} value={newBlog.content} onChange={e => setNewBlog({ ...newBlog, content: e.target.value })} className="mt-1 w-full bg-black border border-neutral-800 p-2 text-xs text-white font-mono" placeholder="## Technical breakdown..." />
+            </label>
+            <button className="cyber-btn-yellow px-4 py-2 text-xs">PUBLISH BLOG POST</button>
+          </form>
 
           <div className="cyber-card border border-neutral-800 overflow-x-auto">
             <table className="w-full text-left text-xs">

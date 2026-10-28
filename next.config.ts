@@ -8,6 +8,7 @@ const nextConfig: NextConfig = {
     root: path.resolve(__dirname),
     rules: {
       "*.css": {
+        condition: { not: "foreign" },
         loaders: ["@tailwindcss/turbopack"],
         as: "*.css",
       },

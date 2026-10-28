@@ -119,7 +119,7 @@ PostgreSQL and Prisma are configured. Accounts, blogs, events, challenges, flags
 
 ### 3.3 Intelligence Blog (`/blog`)
 * **Reader Interface**:
-  * Filter by category: `Vulnerability Research`, `Club Writeups`, `Tool Breakdowns`, `Industry News`.
+  * Filter by category: `All`, `Club Writeups`, `Cybernews`, and `Vulnerabilities`.
   * Cyberpunk article cards with author tags, reading time, and publish dates.
   * Single post view (`/blog/[slug]`): Sanitized Markdown with GitHub-style syntax highlighting for code snippets, exploits, and PoCs.
 * **Admin Publishing Tool**:

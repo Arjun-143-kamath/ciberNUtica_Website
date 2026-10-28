@@ -7,8 +7,7 @@ import { MarkdownRenderer } from '@/components/blog/MarkdownRenderer';
 import { 
   BookOpen, 
   Terminal, 
-  Plus, 
-  X, 
+  X,
   Clock, 
   User, 
   ArrowRight, 
@@ -20,7 +19,7 @@ import {
 } from 'lucide-react';
 
 export default function BlogPage() {
-  const { blogs, addBlogPost, currentUser } = useCTF();
+  const { blogs } = useCTF();
 
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -37,20 +36,7 @@ export default function BlogPage() {
     }
   }, [blogs]);
 
-  // Admin upload state
-  const [showCreateModal, setShowCreateModal] = useState<boolean>(false);
-  const [newPost, setNewPost] = useState({
-    title: '',
-    slug: '',
-    summary: '',
-    content: '',
-    category: 'Vulnerability Research',
-    authorName: currentUser?.username || 'Command Staff',
-    authorRole: 'Research Analyst',
-    readTime: '5 min read'
-  });
-
-  const categories = ['ALL', 'Vulnerability Research', 'Cryptography', 'Club Writeups', 'Defensive Tactics'];
+  const categories = ['ALL', 'Club Writeups', 'Cybernews', 'Vulnerabilities'];
 
   const filteredBlogs = blogs.filter(b => {
     const matchesCat = selectedCategory === 'ALL' || b.category === selectedCategory;
@@ -58,33 +44,6 @@ export default function BlogPage() {
                           b.summary.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCat && matchesSearch;
   });
-
-  const handleCreateBlog = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newPost.title || !newPost.content) return;
-
-    try {
-      await addBlogPost({
-        ...newPost,
-        slug: newPost.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')
-      });
-    } catch {
-      window.alert('Publishing failed. Please sign in with an administrator account and try again.');
-      return;
-    }
-
-    setShowCreateModal(false);
-    setNewPost({
-      title: '',
-      slug: '',
-      summary: '',
-      content: '',
-      category: 'Vulnerability Research',
-      authorName: currentUser?.username || 'Command Staff',
-      authorRole: 'Research Analyst',
-      readTime: '5 min read'
-    });
-  };
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-10">
@@ -105,16 +64,6 @@ export default function BlogPage() {
             </p>
           </div>
 
-          {/* Admin Publish Button */}
-          {currentUser?.role === 'ADMIN' && (
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="cyber-btn-yellow px-5 py-3 text-xs flex items-center gap-2 shrink-0 self-start md:self-auto cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>PUBLISH DISPATCH</span>
-            </button>
-          )}
         </div>
       </div>
 
@@ -245,124 +194,6 @@ export default function BlogPage() {
         </div>
       )}
 
-      {/* =========================================================================
-          ADMIN MODAL: PUBLISH NEW BLOG
-          ========================================================================= */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="relative w-full max-w-2xl bg-neutral-950 border border-[#FCEE09] p-6 sm:p-8 font-mono text-white shadow-[0_0_40px_rgba(252,238,9,0.2)] max-h-[90vh] overflow-y-auto">
-            
-            <button
-              onClick={() => setShowCreateModal(false)}
-              className="absolute top-4 right-4 text-neutral-400 hover:text-[#FCEE09]"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <h3 className="text-base font-bold text-[#FCEE09] mb-6 uppercase flex items-center gap-2">
-              <Plus className="w-4 h-4" />
-              <span>DISPATCH INTELLIGENCE / UPLOAD BLOG</span>
-            </h3>
-
-            <form onSubmit={handleCreateBlog} className="space-y-4 text-xs">
-              <div>
-                <label className="text-neutral-400 block mb-1">DISPATCH HEADLINE</label>
-                <input
-                  type="text"
-                  required
-                  value={newPost.title}
-                  onChange={(e) => setNewPost({ ...newPost, title: e.target.value })}
-                  placeholder="e.g. Exploiting CVE-2026-9912: Buffer Overflow in SSH Daemon"
-                  className="w-full bg-black border border-neutral-800 p-2.5 text-white focus:border-[#FCEE09] outline-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-neutral-400 block mb-1">CATEGORY</label>
-                  <select
-                    value={newPost.category}
-                    onChange={(e) => setNewPost({ ...newPost, category: e.target.value })}
-                    className="w-full bg-black border border-neutral-800 p-2.5 text-white focus:border-[#FCEE09] outline-none"
-                  >
-                    <option value="Vulnerability Research">Vulnerability Research</option>
-                    <option value="Cryptography">Cryptography</option>
-                    <option value="Club Writeups">Club Writeups</option>
-                    <option value="Defensive Tactics">Defensive Tactics</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-neutral-400 block mb-1">ESTIMATED READ TIME</label>
-                  <input
-                    type="text"
-                    required
-                    value={newPost.readTime}
-                    onChange={(e) => setNewPost({ ...newPost, readTime: e.target.value })}
-                    placeholder="e.g. 6 min read"
-                    className="w-full bg-black border border-neutral-800 p-2.5 text-white focus:border-[#FCEE09] outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-neutral-400 block mb-1">AUTHOR NAME</label>
-                  <input
-                    type="text"
-                    required
-                    value={newPost.authorName}
-                    onChange={(e) => setNewPost({ ...newPost, authorName: e.target.value })}
-                    placeholder="e.g. Rishi Bhargava or Arjun R Kamath"
-                    className="w-full bg-black border border-neutral-800 p-2.5 text-white focus:border-[#FCEE09] outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="text-neutral-400 block mb-1">AUTHOR ROLE</label>
-                  <input
-                    type="text"
-                    required
-                    value={newPost.authorRole}
-                    onChange={(e) => setNewPost({ ...newPost, authorRole: e.target.value })}
-                    placeholder="e.g. Threat Operations Lead"
-                    className="w-full bg-black border border-neutral-800 p-2.5 text-white focus:border-[#FCEE09] outline-none"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-neutral-400 block mb-1">EXECUTIVE SUMMARY</label>
-                <textarea
-                  rows={2}
-                  required
-                  value={newPost.summary}
-                  onChange={(e) => setNewPost({ ...newPost, summary: e.target.value })}
-                  placeholder="Brief 1-2 sentence overview for the briefing cards..."
-                  className="w-full bg-black border border-neutral-800 p-2.5 text-white focus:border-[#FCEE09] outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="text-neutral-400 block mb-1">ARTICLE CONTENT (MARKDOWN)</label>
-                <textarea
-                  rows={8}
-                  required
-                  value={newPost.content}
-                  onChange={(e) => setNewPost({ ...newPost, content: e.target.value })}
-                  placeholder="## Technical Breakdown..."
-                  className="w-full bg-black border border-neutral-800 p-2.5 text-white focus:border-[#FCEE09] outline-none font-mono"
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="cyber-btn-yellow w-full py-3 text-xs font-bold uppercase mt-4"
-              >
-                PUBLISH INTEL DISPATCH
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
 
     </div>
   );

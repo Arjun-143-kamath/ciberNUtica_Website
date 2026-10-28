@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useCTF } from '@/lib/store';
 import { 
   Flag, 
@@ -14,7 +14,6 @@ import {
   Sparkles, 
   X, 
   Search, 
-  Plus, 
   Flame, 
   Lock,
   ChevronRight,
@@ -26,7 +25,7 @@ import {
   Check
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { Challenge, ChallengeCategory, EventType } from '@/lib/types';
+import { Challenge, ChallengeCategory } from '@/lib/types';
 
 export default function EventsAndCTFPage() {
   const { 
@@ -38,7 +37,6 @@ export default function EventsAndCTFPage() {
     submitFlag, 
     unlockHint, 
     unlockedHints, 
-    addEvent,
     isScoreboardFrozen,
     setIsScoreboardFrozen,
     getSubmissionAttempts
@@ -46,32 +44,24 @@ export default function EventsAndCTFPage() {
 
   // Tab: 'arena' (CTF Challenges & Scoreboard) vs 'operations' (Workshops, Sessions, Upcoming & Past)
   const [activeTab, setActiveTab] = useState<'arena' | 'operations' | 'scoreboard'>('arena');
+  const [currentTime, setCurrentTime] = useState<number | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const ctfEvents = events.filter(event => event.type === 'CTF' && event.isPublished);
   const [selectedCtfEventId, setSelectedCtfEventId] = useState('');
   const selectedCtfEvent = ctfEvents.find(event => event.id === selectedCtfEventId) ?? ctfEvents[0];
-  const ctfSubmissionsOpen = Boolean(selectedCtfEvent?.isLiveCTF && Date.now() >= Date.parse(`${selectedCtfEvent.startDate}T${selectedCtfEvent.startTime.slice(0, 5)}:00Z`) && Date.now() <= Date.parse(`${selectedCtfEvent.endDate ?? selectedCtfEvent.startDate}T${selectedCtfEvent.endTime.slice(0, 5)}:00Z`));
+  const ctfSubmissionsOpen = Boolean(currentTime !== null && selectedCtfEvent?.isLiveCTF && currentTime >= Date.parse(`${selectedCtfEvent.startDate}T${selectedCtfEvent.startTime.slice(0, 5)}:00Z`) && currentTime <= Date.parse(`${selectedCtfEvent.endDate ?? selectedCtfEvent.startDate}T${selectedCtfEvent.endTime.slice(0, 5)}:00Z`));
   const [activeChallenge, setActiveChallenge] = useState<Challenge | null>(null);
   const [flagInput, setFlagInput] = useState<string>('');
   const [submissionFeedback, setSubmissionFeedback] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [copiedFlagPrefix, setCopiedFlagPrefix] = useState(false);
 
-  // Event modal for admins
-  const [showAddEventModal, setShowAddEventModal] = useState(false);
-  const [newEvent, setNewEvent] = useState({
-    title: '',
-    slug: '',
-    description: '',
-    type: 'WORKSHOP' as EventType,
-    location: '',
-    date: '',
-    startTime: '',
-    endTime: '',
-    isPublished: true,
-    isLiveCTF: false,
-    bannerUrl: ''
-  });
+  useEffect(() => {
+    const updateCurrentTime = () => setCurrentTime(Date.now());
+    updateCurrentTime();
+    const interval = window.setInterval(updateCurrentTime, 60_000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   // Filter categories
   const categories: Array<ChallengeCategory | 'ALL'> = [
@@ -140,29 +130,6 @@ export default function EventsAndCTFPage() {
       const res = await unlockHint(activeChallenge.id, hintId, cost);
       setSubmissionFeedback({ type: res.success ? 'info' : 'error', message: res.message });
     }
-  };
-
-  const handleCreateEvent = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newEvent.title) return;
-    void addEvent({
-      ...newEvent,
-      slug: newEvent.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')
-    }).catch(error => window.alert(error instanceof Error ? error.message : 'Unable to add event.'));
-    setShowAddEventModal(false);
-    setNewEvent({
-      title: '',
-      slug: '',
-      description: '',
-      type: 'WORKSHOP',
-      location: '',
-      date: '',
-      startTime: '',
-      endTime: '',
-      isPublished: true,
-      isLiveCTF: false,
-      bannerUrl: ''
-    });
   };
 
   return (
@@ -536,15 +503,6 @@ export default function EventsAndCTFPage() {
               </div>
             </div>
 
-            {currentUser?.role === 'ADMIN' && (
-              <button
-                onClick={() => setShowAddEventModal(true)}
-                className="cyber-btn-yellow px-4 py-2 text-xs flex items-center gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                <span>ADD NEW EVENT</span>
-              </button>
-            )}
           </div>
 
           {/* Events List */}
@@ -556,12 +514,12 @@ export default function EventsAndCTFPage() {
               >
                 <div className="space-y-3">
                   <div className="flex items-center justify-between text-xs font-mono">
-                    <span className={`px-2 py-0.5 text-[10px] font-bold border ${
+                <span className={`px-2 py-0.5 text-[10px] font-bold border ${
                       evt.type === 'CTF' 
                         ? 'bg-red-950 text-red-400 border-red-800' 
                         : 'bg-[#FCEE09]/10 text-[#FCEE09] border-[#FCEE09]/30'
                     }`}>
-                      {evt.type}
+                      {evt.type === 'CTF' ? 'CTF COMPETITION' : `${evt.type} · GENERAL EVENT`}
                     </span>
 
                     {evt.isLiveCTF ? (
@@ -570,7 +528,7 @@ export default function EventsAndCTFPage() {
                         LIVE CTF OPERATION
                       </span>
                     ) : (
-                      <span className="text-neutral-500 text-[11px]">SCHEDULED SESSION</span>
+                      <span className="text-neutral-500 text-[11px]">{evt.type === 'CTF' ? 'SCHEDULED CTF' : 'GENERAL EVENT'}</span>
                     )}
                   </div>
 
@@ -761,111 +719,6 @@ export default function EventsAndCTFPage() {
               </form>
             )}
 
-          </div>
-        </div>
-      )}
-
-      {/* =========================================================================
-          ADMIN MODAL: CREATE EVENT
-          ========================================================================= */}
-      {showAddEventModal && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="relative w-full max-w-lg bg-neutral-950 border border-[#FCEE09] p-6 font-mono text-white shadow-[0_0_40px_rgba(252,238,9,0.2)]">
-            <button
-              onClick={() => setShowAddEventModal(false)}
-              className="absolute top-4 right-4 text-neutral-400 hover:text-[#FCEE09]"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <h3 className="text-base font-bold text-[#FCEE09] mb-4 uppercase flex items-center gap-2">
-              <Plus className="w-4 h-4" />
-              <span>DISPATCH NEW OPERATION / EVENT</span>
-            </h3>
-
-            <form onSubmit={handleCreateEvent} className="space-y-4 text-xs">
-              <div>
-                <label className="text-neutral-400 block mb-1">EVENT TITLE</label>
-                <input
-                  type="text"
-                  required
-                  value={newEvent.title}
-                  onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })}
-                  placeholder="e.g. Reverse Engineering Deep Dive"
-                  className="w-full bg-black border border-neutral-800 p-2 text-white focus:border-[#FCEE09] outline-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-neutral-400 block mb-1">EVENT TYPE</label>
-                  <select
-                    value={newEvent.type}
-                    onChange={(e) => setNewEvent({ ...newEvent, type: e.target.value as EventType })}
-                    className="w-full bg-black border border-neutral-800 p-2 text-white focus:border-[#FCEE09] outline-none"
-                  >
-                    <option value="WORKSHOP">WORKSHOP</option>
-                    <option value="SESSION">SESSION</option>
-                    <option value="TALK">SPEAKER TALK</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-neutral-400 block mb-1">DATE</label>
-                  <input
-                    type="text"
-                    required
-                    value={newEvent.date}
-                    onChange={(e) => setNewEvent({ ...newEvent, date: e.target.value })}
-                    placeholder="e.g. DEC 12, 2026"
-                    className="w-full bg-black border border-neutral-800 p-2 text-white focus:border-[#FCEE09] outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-neutral-400 block mb-1">START - END TIME</label>
-                  <input
-                    type="text"
-                    required
-                    value={newEvent.startTime}
-                    onChange={(e) => setNewEvent({ ...newEvent, startTime: e.target.value })}
-                    placeholder="14:00 - 18:00 UTC"
-                    className="w-full bg-black border border-neutral-800 p-2 text-white focus:border-[#FCEE09] outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="text-neutral-400 block mb-1">LOCATION / VENUE</label>
-                  <input
-                    type="text"
-                    required
-                    value={newEvent.location}
-                    onChange={(e) => setNewEvent({ ...newEvent, location: e.target.value })}
-                    placeholder="Cyber Lab 4 / Discord"
-                    className="w-full bg-black border border-neutral-800 p-2 text-white focus:border-[#FCEE09] outline-none"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-neutral-400 block mb-1">DESCRIPTION</label>
-                <textarea
-                  rows={3}
-                  required
-                  value={newEvent.description}
-                  onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })}
-                  placeholder="Overview of the technical agenda..."
-                  className="w-full bg-black border border-neutral-800 p-2 text-white focus:border-[#FCEE09] outline-none"
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="cyber-btn-yellow w-full py-2.5 text-xs font-bold uppercase mt-4"
-              >
-                PUBLISH OPERATION
-              </button>
-            </form>
           </div>
         </div>
       )}

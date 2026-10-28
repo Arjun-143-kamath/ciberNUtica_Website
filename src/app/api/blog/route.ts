@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
+const blogCategories = new Set(['Club Writeups', 'Cybernews', 'Vulnerabilities']);
+
+function normalizeCategory(category: string) {
+  if (category === 'Vulnerability Research') return 'Vulnerabilities';
+  if (category === 'Cryptography' || category === 'Defensive Tactics') return 'Cybernews';
+  return blogCategories.has(category) ? category : 'Cybernews';
+}
+
 function toBlogPost(post: {
   id: string; title: string; slug: string; summary: string; content: string; category: string;
   coverImage: string | null; createdAt: Date; authorName: string | null; authorRole: string | null;
@@ -10,7 +18,7 @@ function toBlogPost(post: {
   const words = post.content.trim().split(/\s+/).filter(Boolean).length;
   return {
     id: post.id, title: post.title, slug: post.slug, summary: post.summary, content: post.content,
-    category: post.category, authorName: post.authorName ?? post.author.username,
+    category: normalizeCategory(post.category), authorName: post.authorName ?? post.author.username,
     authorRole: post.authorRole ?? (post.author.role === 'ADMIN' ? 'Command Staff' : 'Research Analyst'),
     readTime: `${Math.max(1, Math.ceil(words / 200))} min read`,
     publishedAt: post.createdAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase(),
@@ -37,7 +45,7 @@ export async function POST(request: NextRequest) {
   const slugInput = typeof body.slug === 'string' ? body.slug : title;
   const slug = slugInput.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 100);
   const coverImage = typeof body.coverImage === 'string' && body.coverImage.length < 2048 ? body.coverImage : null;
-  if (!title || title.length > 160 || !summary || summary.length > 500 || !content.trim() || content.length > 100_000 || !category || category.length > 64 || !slug) {
+  if (!title || title.length > 160 || !summary || summary.length > 500 || !content.trim() || content.length > 100_000 || !blogCategories.has(category) || !slug) {
     return NextResponse.json({ error: 'Check the title, summary, category, and article content.' }, { status: 400 });
   }
   try {

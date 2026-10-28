@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
   if (!type) return NextResponse.json({ error: 'Invalid event type.' }, { status: 400 });
   const slug = (typeof body.slug === 'string' ? body.slug : title).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 100);
   try {
-    const event = await prisma.event.create({ data: { title, slug, description, type: type as 'WORKSHOP' | 'SESSION' | 'CTF' | 'SPEAKER', location: typeof body.location === 'string' ? body.location.slice(0, 200) : null, bannerUrl: typeof body.bannerUrl === 'string' ? body.bannerUrl.slice(0, 2048) : null, startTime: times.start, endTime: times.end, isPublished: body.isPublished !== false, isLiveCTF: body.isLiveCTF === true } });
+    const event = await prisma.event.create({ data: { title, slug, description, type: type as 'WORKSHOP' | 'SESSION' | 'CTF' | 'SPEAKER', location: typeof body.location === 'string' ? body.location.slice(0, 200) : null, bannerUrl: typeof body.bannerUrl === 'string' ? body.bannerUrl.slice(0, 2048) : null, startTime: times.start, endTime: times.end, isPublished: body.isPublished !== false, isLiveCTF: type === 'CTF' && body.isLiveCTF === true } });
     return NextResponse.json({ event: toEvent(event) }, { status: 201 });
   } catch (error) {
     if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002') return NextResponse.json({ error: 'An event already uses that URL slug.' }, { status: 409 });
@@ -66,6 +66,7 @@ export async function PATCH(request: NextRequest) {
   if (typeof body.id !== 'string') return NextResponse.json({ error: 'Invalid event update.' }, { status: 400 });
   const existing = await prisma.event.findUnique({ where: { id: body.id } });
   if (!existing) return NextResponse.json({ error: 'Event not found.' }, { status: 404 });
+  if (body.isLiveCTF === true && existing.type !== 'CTF') return NextResponse.json({ error: 'Only CTF competition events can open submissions.' }, { status: 400 });
   const data: { isLiveCTF?: boolean; isPublished?: boolean; title?: string; description?: string; startTime?: Date; endTime?: Date } = {};
   if (body.isLiveCTF !== undefined) {
     if (typeof body.isLiveCTF !== 'boolean') return NextResponse.json({ error: 'Invalid live state.' }, { status: 400 });

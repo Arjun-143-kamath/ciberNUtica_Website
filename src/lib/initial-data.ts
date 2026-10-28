@@ -344,7 +344,7 @@ When this abstract range computation diverges from actual CPU register state dur
 ### Remediation & Defense
 - Restrict unprivileged eBPF access: \`sysctl -w kernel.unprivileged_bpf_disabled=1\`
 - Implement runtime integrity monitors targeting BPF program loads.`,
-    category: 'Vulnerability Research',
+    category: 'Vulnerabilities',
     authorName: 'Rishi Bhargava',
     authorRole: 'Threat Operations Lead',
     readTime: '6 min read',
@@ -386,7 +386,7 @@ Without the noise term $e$, this is Gaussian elimination solvable in polynomial 
 
 ### ciberNUtica Research Recommendations
 All club servers have initiated migration towards hybrid X25519 + Kyber768 TLS cipher suites.`,
-    category: 'Cryptography',
+    category: 'Cybernews',
     authorName: 'Arjun R Kamath',
     authorRole: 'Systems Lead',
     readTime: '8 min read',

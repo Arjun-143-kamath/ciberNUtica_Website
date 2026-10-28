@@ -2,6 +2,7 @@ import 'server-only';
 import { createHmac, timingSafeEqual, randomBytes, randomUUID, scrypt as scryptCallback } from 'node:crypto';
 import { promisify } from 'node:util';
 import { cookies } from 'next/headers';
+import { connection } from 'next/server';
 import { User } from './types';
 import { prisma } from './prisma';
 
@@ -31,6 +32,7 @@ export function createSessionToken(user: Pick<User, 'id' | 'username' | 'email' 
 }
 
 export async function getSession(): Promise<User | null> {
+  await connection();
   const token = (await cookies()).get(COOKIE_NAME)?.value;
   if (!token) return null;
   const [payload, signature, extra] = token.split('.');

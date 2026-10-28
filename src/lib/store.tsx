@@ -11,19 +11,13 @@ import {
   Submission, 
   User 
 } from './types';
-import { 
-  INITIAL_BLOGS, 
-  INITIAL_CHALLENGES, 
-  INITIAL_COORDINATORS, 
-  INITIAL_EVENTS, 
-  INITIAL_SOLVES, 
-  INITIAL_USERS 
-} from './initial-data';
-import { generateScoreboard, resolveChallengePoints, verifyFlag } from './ctf-engine';
+import { INITIAL_BLOGS, INITIAL_COORDINATORS } from './initial-data';
+import { generateScoreboard, resolveChallengePoints } from './ctf-engine';
 
 interface HintUnlock {
   userId: string;
   challengeId: string;
+  hintId: string;
   cost: number;
 }
 
@@ -40,154 +34,131 @@ interface CTFContextType {
   scoreboard: ScoreboardEntry[];
   unlockedHints: HintUnlock[];
   isScoreboardFrozen: boolean;
-  setIsScoreboardFrozen: (frozen: boolean) => void;
+  setIsScoreboardFrozen: (frozen: boolean) => Promise<void>;
   // Actions
-  loginAs: (role: 'ADMIN' | 'USER', username?: string) => void;
-  logout: () => void;
-  addEvent: (event: Omit<EventItem, 'id'>) => void;
-  updateEvent: (id: string, updates: Partial<EventItem>) => void;
+  refreshSession: () => Promise<void>;
+  refreshCtfState: () => Promise<void>;
+  logout: () => Promise<void>;
+  addEvent: (event: Omit<EventItem, 'id'>) => Promise<void>;
+  updateEvent: (id: string, updates: Partial<EventItem>) => Promise<void>;
   deleteEvent: (id: string) => void;
-  addChallenge: (challenge: Omit<Challenge, 'id' | 'currentPoints'>) => void;
-  updateChallenge: (id: string, updates: Partial<Challenge>) => void;
-  deleteChallenge: (id: string) => void;
-  submitFlag: (challengeId: string, flag: string) => { success: boolean; message: string; pointsAwarded?: number };
-  unlockHint: (challengeId: string, hintId: string, cost: number) => { success: boolean; message: string };
-  addBlogPost: (post: Omit<BlogPost, 'id' | 'publishedAt'>) => void;
-  updateBlogPost: (id: string, updates: Partial<BlogPost>) => void;
-  deleteBlogPost: (id: string) => void;
+  addChallenge: (challenge: Omit<Challenge, 'id' | 'currentPoints'>) => Promise<void>;
+  updateChallenge: (id: string, updates: Partial<Challenge>) => Promise<void>;
+  deleteChallenge: (id: string) => Promise<void>;
+  submitFlag: (challengeId: string, flag: string) => Promise<{ success: boolean; message: string; pointsAwarded?: number }>;
+  unlockHint: (challengeId: string, hintId: string, cost: number) => Promise<{ success: boolean; message: string }>;
+  addBlogPost: (post: Omit<BlogPost, 'id' | 'publishedAt'>) => Promise<void>;
+  deleteBlogPost: (id: string) => Promise<void>;
   getSubmissionAttempts: (challengeId: string) => number;
-  clearSubmissions: () => void;
+  clearSubmissions: () => Promise<void>;
 }
 
 const CTFContext = createContext<CTFContextType | undefined>(undefined);
 
-const STORAGE_KEYS = {
-  USER: 'cibernutica_user_v1',
-  EVENTS: 'cibernutica_events_v1',
-  CHALLENGES: 'cibernutica_challenges_v1',
-  SOLVES: 'cibernutica_solves_v1',
-  SUBMISSIONS: 'cibernutica_submissions_v1',
-  BLOGS: 'cibernutica_blogs_v1',
-  HINTS: 'cibernutica_hints_v1',
-  FROZEN: 'cibernutica_frozen_v1'
-};
-
 export function CTFProvider({ children }: { children: React.ReactNode }) {
-  const [currentUser, setCurrentUser] = useState<User | null>(INITIAL_USERS[0]); // Default to admin for immediate testing
-  const [users] = useState<User[]>(INITIAL_USERS);
-  const [events, setEvents] = useState<EventItem[]>(INITIAL_EVENTS);
-  const [challenges, setChallenges] = useState<Challenge[]>(INITIAL_CHALLENGES);
-  const [solves, setSolves] = useState<Solve[]>(INITIAL_SOLVES);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [users, setUsers] = useState<User[]>([]);
+  const [events, setEvents] = useState<EventItem[]>([]);
+  const [challenges, setChallenges] = useState<Challenge[]>([]);
+  const [solves, setSolves] = useState<Solve[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [blogs, setBlogs] = useState<BlogPost[]>(INITIAL_BLOGS);
   const [coordinators] = useState<Coordinator[]>(INITIAL_COORDINATORS);
   const [unlockedHints, setUnlockedHints] = useState<HintUnlock[]>([]);
   const [isScoreboardFrozen, setIsScoreboardFrozen] = useState<boolean>(false);
 
+  const refreshCtfState = async () => {
+    const response = await fetch('/api/ctf/state', { cache: 'no-store' });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Unable to load CTF data.');
+    if (Array.isArray(data.challenges)) setChallenges(data.challenges);
+    if (Array.isArray(data.solves)) setSolves(data.solves);
+    if (Array.isArray(data.users)) setUsers(data.users);
+    if (Array.isArray(data.submissions)) setSubmissions(data.submissions);
+    if (Array.isArray(data.unlockedHints)) setUnlockedHints(data.unlockedHints);
+    setIsScoreboardFrozen(data.isScoreboardFrozen === true);
+  };
+
+  const updateScoreboardFreeze = async (frozen: boolean) => {
+    const response = await fetch('/api/ctf/freeze', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ frozen }) });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Unable to change scoreboard state.');
+    setIsScoreboardFrozen(result.isScoreboardFrozen);
+  };
+
   // Initialize from LocalStorage if available
   useEffect(() => {
+    void fetch('/api/auth/session', { cache: 'no-store' }).then(r => r.json()).then(data => {
+      const user = data.user as User | null;
+      setCurrentUser(user);
+      if (user?.role === 'USER') setUsers(existing => existing.some(item => item.id === user.id) ? existing : [...existing, user]);
+    }).catch(() => setCurrentUser(null));
     try {
-      const savedUser = localStorage.getItem(STORAGE_KEYS.USER);
-      if (savedUser) setCurrentUser(JSON.parse(savedUser));
+      void fetch('/api/events', { cache: 'no-store' }).then(response => response.json()).then(data => {
+        if (Array.isArray(data.events)) setEvents(data.events);
+      }).catch(() => undefined);
 
-      const savedEvents = localStorage.getItem(STORAGE_KEYS.EVENTS);
-      if (savedEvents) setEvents(JSON.parse(savedEvents));
+      void fetch('/api/blog', { cache: 'no-store' }).then(response => response.json()).then(data => {
+        if (Array.isArray(data.posts)) setBlogs(data.posts);
+      }).catch(() => undefined);
 
-      const savedChals = localStorage.getItem(STORAGE_KEYS.CHALLENGES);
-      if (savedChals) setChallenges(JSON.parse(savedChals));
-
-      const savedSolves = localStorage.getItem(STORAGE_KEYS.SOLVES);
-      if (savedSolves) setSolves(JSON.parse(savedSolves));
-
-      const savedSubmissions = localStorage.getItem(STORAGE_KEYS.SUBMISSIONS);
-      if (savedSubmissions) setSubmissions(JSON.parse(savedSubmissions));
-
-      const savedBlogs = localStorage.getItem(STORAGE_KEYS.BLOGS);
-      if (savedBlogs) setBlogs(JSON.parse(savedBlogs));
-
-      const savedHints = localStorage.getItem(STORAGE_KEYS.HINTS);
-      if (savedHints) setUnlockedHints(JSON.parse(savedHints));
-
-      const savedFrozen = localStorage.getItem(STORAGE_KEYS.FROZEN);
-      if (savedFrozen !== null) setIsScoreboardFrozen(JSON.parse(savedFrozen));
     } catch (e) {
       console.warn('LocalStorage unavailable, running in memory store', e);
     }
+    void refreshCtfState().catch(() => undefined);
   }, []);
 
-  // Sync to local storage
-  const syncStorage = (key: string, data: unknown) => {
-    try {
-      localStorage.setItem(key, JSON.stringify(data));
-    } catch (e) {
-      console.warn('Storage sync error:', e);
-    }
+  const refreshSession = async () => {
+    const response = await fetch('/api/auth/session', { cache: 'no-store' });
+    const data = await response.json();
+    const user = data.user as User | null;
+    setCurrentUser(user);
+    if (user?.role === 'USER') setUsers(existing => existing.some(item => item.id === user.id) ? existing : [...existing, user]);
   };
 
-  const loginAs = (role: 'ADMIN' | 'USER', username?: string) => {
-    if (role === 'ADMIN') {
-      const admin = INITIAL_USERS.find(u => u.role === 'ADMIN') || INITIAL_USERS[0];
-      setCurrentUser(admin);
-      syncStorage(STORAGE_KEYS.USER, admin);
-    } else {
-      const competitor = INITIAL_USERS.find(u => u.username === username) || INITIAL_USERS[1];
-      setCurrentUser(competitor);
-      syncStorage(STORAGE_KEYS.USER, competitor);
-    }
-  };
-
-  const logout = () => {
+  const logout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' });
     setCurrentUser(null);
-    try {
-      localStorage.removeItem(STORAGE_KEYS.USER);
-    } catch {}
   };
 
   // Event handlers
-  const addEvent = (eventData: Omit<EventItem, 'id'>) => {
-    const newEvent: EventItem = {
-      ...eventData,
-      id: `evt-${Date.now()}`
-    };
-    const updated = [newEvent, ...events];
+  const addEvent = async (eventData: Omit<EventItem, 'id'>) => {
+    const response = await fetch('/api/events', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(eventData) });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Unable to add event.');
+    const updated = [result.event as EventItem, ...events];
     setEvents(updated);
-    syncStorage(STORAGE_KEYS.EVENTS, updated);
   };
 
-  const updateEvent = (id: string, updates: Partial<EventItem>) => {
-    const updated = events.map(e => (e.id === id ? { ...e, ...updates } : e));
+  const updateEvent = async (id: string, updates: Partial<EventItem>) => {
+    const response = await fetch('/api/events', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, ...updates }) });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Unable to update event.');
+    const updated = events.map(e => (e.id === id ? result.event as EventItem : e));
     setEvents(updated);
-    syncStorage(STORAGE_KEYS.EVENTS, updated);
   };
 
-  const deleteEvent = (id: string) => {
-    const updated = events.filter(e => e.id !== id);
-    setEvents(updated);
-    syncStorage(STORAGE_KEYS.EVENTS, updated);
-  };
+  const deleteEvent = (id: string) => { setEvents(events.filter(e => e.id !== id)); };
 
   // Challenge handlers
-  const addChallenge = (chalData: Omit<Challenge, 'id' | 'currentPoints'>) => {
-    const newChallenge: Challenge = {
-      ...chalData,
-      id: `chal-${Date.now()}`,
-      currentPoints: chalData.initialPoints
-    };
-    const updated = [...challenges, newChallenge];
-    setChallenges(updated);
-    syncStorage(STORAGE_KEYS.CHALLENGES, updated);
+  const addChallenge = async (chalData: Omit<Challenge, 'id' | 'currentPoints'>) => {
+    const response = await fetch('/api/ctf/challenges', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(chalData) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Unable to create challenge.');
+    setChallenges([...challenges, data.challenge]);
   };
 
-  const updateChallenge = (id: string, updates: Partial<Challenge>) => {
-    const updated = challenges.map(c => (c.id === id ? { ...c, ...updates } : c));
-    setChallenges(updated);
-    syncStorage(STORAGE_KEYS.CHALLENGES, updated);
+  const updateChallenge = async (id: string, updates: Partial<Challenge>) => {
+    const response = await fetch('/api/ctf/challenges', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, ...updates }) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Unable to update challenge.');
+    setChallenges(challenges.map(challenge => challenge.id === id ? data.challenge : challenge));
   };
 
-  const deleteChallenge = (id: string) => {
-    const updated = challenges.filter(c => c.id !== id);
-    setChallenges(updated);
-    syncStorage(STORAGE_KEYS.CHALLENGES, updated);
+  const deleteChallenge = async (id: string) => {
+    const response = await fetch(`/api/ctf/challenges?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (!response.ok) throw new Error('Unable to delete challenge.');
+    setChallenges(challenges.filter(challenge => challenge.id !== id));
   };
 
   const getSubmissionAttempts = (challengeId: string): number => {
@@ -197,144 +168,51 @@ export function CTFProvider({ children }: { children: React.ReactNode }) {
     ).length;
   };
 
-  const clearSubmissions = () => {
+  const clearSubmissions = async () => {
+    const response = await fetch('/api/ctf/submissions', { method: 'DELETE' });
+    if (!response.ok) throw new Error('Unable to clear submission records.');
     setSubmissions([]);
-    syncStorage(STORAGE_KEYS.SUBMISSIONS, []);
   };
 
-  // Flag Submission Engine (with rate-limiting & CTFd dynamic re-weighting)
-  const submitFlag = (
-    challengeId: string, 
-    flagText: string
-  ): { success: boolean; message: string; pointsAwarded?: number } => {
-    if (!currentUser) {
-      return { success: false, message: 'AUTHENTICATION_REQUIRED: Please authenticate first.' };
-    }
-
-    const challenge = challenges.find(c => c.id === challengeId);
-    if (!challenge) {
-      return { success: false, message: 'CHALLENGE_NOT_FOUND: Invalid challenge identifier.' };
-    }
-
-    // Check if already solved
-    const alreadySolved = solves.some(
-      s => s.userId === currentUser.id && s.challengeId === challengeId
-    );
-    if (alreadySolved) {
-      return { success: false, message: 'DUPLICATE_SOLVE: You have already captured this flag.' };
-    }
-
-    // Rate Limiting check (anti-brute force: 5 attempts in past 60s)
-    const now = Date.now();
-    const recentAttempts = submissions.filter(
-      s => s.userId === currentUser.id && 
-           s.challengeId === challengeId && 
-           (now - new Date(s.submittedAt).getTime()) < 60000
-    );
-
-    if (recentAttempts.length >= 5) {
-      return { 
-        success: false, 
-        message: 'RATE_LIMIT_EXCEEDED: Cooldown active. Maximum 5 attempts per minute.' 
-      };
-    }
-
-    // Validate flag against challenge flags
-    const { isValid } = verifyFlag(flagText, challenge.flags);
-
-    // Audit log submission
-    const newSubmission: Submission = {
-      id: `sub-${Date.now()}`,
-      userId: currentUser.id,
-      username: currentUser.username,
-      challengeId: challenge.id,
-      challengeTitle: challenge.title,
-      providedFlag: flagText,
-      isCorrect: isValid,
-      submittedAt: new Date().toISOString()
-    };
-    const updatedSubmissions = [newSubmission, ...submissions];
-    setSubmissions(updatedSubmissions);
-    syncStorage(STORAGE_KEYS.SUBMISSIONS, updatedSubmissions);
-
-    if (!isValid) {
-      return { success: false, message: 'INCORRECT_FLAG: Access denied.' };
-    }
-
-    // Flag is correct! Calculate points and award solve
-    const updatedSolvesList = [
-      ...solves,
-      {
-        id: `slv-${Date.now()}`,
-        userId: currentUser.id,
-        username: currentUser.username,
-        challengeId: challenge.id,
-        challengeTitle: challenge.title,
-        pointsAwarded: challenge.currentPoints,
-        solvedAt: new Date().toISOString()
-      }
-    ];
-
-    setSolves(updatedSolvesList);
-    syncStorage(STORAGE_KEYS.SOLVES, updatedSolvesList);
-
-    // Recalculate dynamic points across all challenges
-    const rebalancedChallenges = resolveChallengePoints(challenges, updatedSolvesList);
-    setChallenges(rebalancedChallenges);
-    syncStorage(STORAGE_KEYS.CHALLENGES, rebalancedChallenges);
-
-    return { 
-      success: true, 
-      message: 'FLAG_VERIFIED: Access granted. Points recorded on scoreboard.',
-      pointsAwarded: challenge.currentPoints
-    };
+  const submitFlag = async (challengeId: string, flagText: string) => {
+    const response = await fetch('/api/ctf/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ challengeId, flag: flagText }) });
+    const result = await response.json();
+    await refreshCtfState();
+    return result as { success: boolean; message: string; pointsAwarded?: number };
   };
 
-  // Hint unlocking
-  const unlockHint = (challengeId: string, hintId: string, cost: number) => {
-    if (!currentUser) return { success: false, message: 'Auth required.' };
-    const exists = unlockedHints.some(
-      h => h.userId === currentUser.id && h.challengeId === challengeId
-    );
-    if (exists) return { success: true, message: 'Already unlocked.' };
-
-    const newUnlock: HintUnlock = { userId: currentUser.id, challengeId, cost };
-    const updated = [...unlockedHints, newUnlock];
-    setUnlockedHints(updated);
-    syncStorage(STORAGE_KEYS.HINTS, updated);
-    return { success: true, message: `Hint unlocked (-${cost} pts penalty applied).` };
+  const unlockHint = async (challengeId: string, hintId: string) => {
+    const response = await fetch('/api/ctf/hints', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ challengeId, hintId }) });
+    const result = await response.json();
+    if (response.ok && currentUser) {
+      const unlock = { userId: currentUser.id, challengeId, hintId, cost: result.cost as number };
+      setUnlockedHints(previous => previous.some(item => item.hintId === hintId && item.userId === currentUser.id) ? previous : [...previous, unlock]);
+      setChallenges(previous => previous.map(challenge => challenge.id === challengeId
+        ? { ...challenge, hints: challenge.hints.map(hint => hint.id === hintId ? { ...hint, content: result.content as string } : hint) }
+        : challenge));
+    }
+    return { success: response.ok, message: result.message || result.error || 'Unable to unlock hint.' };
   };
 
   // Blog operations
-  const addBlogPost = (postData: Omit<BlogPost, 'id' | 'publishedAt'>) => {
-    const newBlog: BlogPost = {
-      ...postData,
-      id: `blog-${Date.now()}`,
-      publishedAt: new Date().toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric'
-      }).toUpperCase()
-    };
-    const updated = [newBlog, ...blogs];
+  const addBlogPost = async (postData: Omit<BlogPost, 'id' | 'publishedAt'>) => {
+    const response = await fetch('/api/blog', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(postData) });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Administrator authentication required to publish dispatches.');
+    const updated = [result.post as BlogPost, ...blogs];
     setBlogs(updated);
-    syncStorage(STORAGE_KEYS.BLOGS, updated);
   };
 
-  const updateBlogPost = (id: string, updates: Partial<BlogPost>) => {
-    const updated = blogs.map(b => (b.id === id ? { ...b, ...updates } : b));
-    setBlogs(updated);
-    syncStorage(STORAGE_KEYS.BLOGS, updated);
-  };
-
-  const deleteBlogPost = (id: string) => {
+  const deleteBlogPost = async (id: string) => {
+    const response = await fetch(`/api/blog?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (!response.ok) throw new Error('Unable to delete this dispatch.');
     const updated = blogs.filter(b => b.id !== id);
     setBlogs(updated);
-    syncStorage(STORAGE_KEYS.BLOGS, updated);
   };
 
   // Generate live scoreboard
-  const scoreboard = generateScoreboard(solves, users, challenges, unlockedHints);
+  const scoreboardUsers = currentUser?.role === 'USER' && !users.some(user => user.id === currentUser.id) ? [...users, currentUser] : users;
+  const scoreboard = generateScoreboard(solves, scoreboardUsers, challenges, unlockedHints);
 
   return (
     <CTFContext.Provider
@@ -351,8 +229,9 @@ export function CTFProvider({ children }: { children: React.ReactNode }) {
         scoreboard,
         unlockedHints,
         isScoreboardFrozen,
-        setIsScoreboardFrozen,
-        loginAs,
+        setIsScoreboardFrozen: updateScoreboardFreeze,
+        refreshSession,
+        refreshCtfState,
         logout,
         addEvent,
         updateEvent,
@@ -363,7 +242,6 @@ export function CTFProvider({ children }: { children: React.ReactNode }) {
         submitFlag,
         unlockHint,
         addBlogPost,
-        updateBlogPost,
         deleteBlogPost,
         getSubmissionAttempts,
         clearSubmissions

@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useCTF } from '@/lib/store';
 import { BlogPost } from '@/lib/types';
+import { MarkdownRenderer } from '@/components/blog/MarkdownRenderer';
 import { 
   BookOpen, 
   Terminal, 
@@ -58,14 +59,19 @@ export default function BlogPage() {
     return matchesCat && matchesSearch;
   });
 
-  const handleCreateBlog = (e: React.FormEvent) => {
+  const handleCreateBlog = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPost.title || !newPost.content) return;
 
-    addBlogPost({
-      ...newPost,
-      slug: newPost.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')
-    });
+    try {
+      await addBlogPost({
+        ...newPost,
+        slug: newPost.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+      });
+    } catch {
+      window.alert('Publishing failed. Please sign in with an administrator account and try again.');
+      return;
+    }
 
     setShowCreateModal(false);
     setNewPost({
@@ -222,8 +228,8 @@ export default function BlogPage() {
             </div>
 
             {/* Article Content */}
-            <div className="space-y-4 text-xs sm:text-sm text-neutral-300 leading-relaxed whitespace-pre-line bg-black/40 p-6 border border-neutral-900">
-              {activeArticle.content}
+            <div className="bg-black/40 p-5 sm:p-6 border border-neutral-900">
+              <MarkdownRenderer content={activeArticle.content} />
             </div>
 
             <div className="mt-8 pt-4 border-t border-neutral-800 flex items-center justify-between text-xs text-neutral-500">

@@ -20,6 +20,8 @@ export interface EventItem {
   type: EventType;
   location: string;
   date: string;
+  startDate?: string;
+  endDate?: string;
   startTime: string;
   endTime: string;
   bannerUrl?: string;
@@ -46,6 +48,7 @@ export interface Flag {
   type: FlagType;
   content: string; // Plaintext or hashed
   caseSensitive: boolean;
+  isSensitive?: boolean;
 }
 
 export interface Hint {

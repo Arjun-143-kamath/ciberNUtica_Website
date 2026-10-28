@@ -1,0 +1,172 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum EventType {
+  WORKSHOP
+  SESSION
+  SPEAKER
+  CTF
+}
+
+enum ChallengeType {
+  STANDARD
+  DYNAMIC
+}
+
+enum FlagType {
+  STATIC
+  REGEX
+}
+
+model User {
+  id           String       @id @default(cuid())
+  name         String
+  email        String       @unique
+  username     String       @unique
+  passwordHash String
+  role         Role         @default(USER)
+  teamName     String?
+  avatarUrl    String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  solves       Solve[]
+  submissions  Submission[]
+  blogs         BlogPost[]
+  hintUnlocks   HintUnlock[]
+}
+
+model Event {
+  id          String      @id @default(cuid())
+  title       String
+  slug        String      @unique
+  description String
+  type        EventType   @default(WORKSHOP)
+  location    String?
+  bannerUrl   String?
+  startTime   DateTime
+  endTime     DateTime
+  isPublished Boolean     @default(false)
+  isLiveCTF   Boolean     @default(false)
+  freezeTime  DateTime?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  challenges  Challenge[]
+}
+
+model Challenge {
+  id            String        @id @default(cuid())
+  eventId       String
+  event         Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  title         String
+  category      String
+  description   String
+  type          ChallengeType @default(STANDARD)
+  initialPoints Int           @default(500)
+  minPoints     Int           @default(100)
+  decaySolves   Int           @default(30)
+  currentPoints Int           @default(500)
+  state         String        @default("visible")
+  maxAttempts   Int           @default(0)
+  files         Json?
+  tags          String[]      @default([])
+  createdAt     DateTime      @default(now())
+  flags         Flag[]
+  hints         Hint[]
+  solves        Solve[]
+  submissions   Submission[]
+  hintUnlocks   HintUnlock[]
+}
+
+model Flag {
+  id          String      @id @default(cuid())
+  challengeId String
+  challenge   Challenge   @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  type        FlagType    @default(STATIC)
+  content     String
+  isSensitive Boolean     @default(true)
+  caseSensitive Boolean   @default(true)
+}
+
+model Hint {
+  id          String    @id @default(cuid())
+  challengeId String
+  challenge   Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  content     String
+  cost        Int       @default(0)
+}
+
+model Solve {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  challengeId   String
+  challenge     Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  pointsAwarded Int
+  createdAt     DateTime  @default(now())
+
+  @@unique([userId, challengeId])
+  @@index([createdAt])
+}
+
+model Submission {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  challengeId  String
+  challenge    Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  providedFlag String
+  isCorrect    Boolean
+  ipAddress    String?
+  createdAt    DateTime  @default(now())
+
+  @@index([userId, challengeId])
+  @@index([createdAt])
+}
+
+model BlogPost {
+  id          String   @id @default(cuid())
+  title       String
+  slug        String   @unique
+  summary     String
+  content     String
+  coverImage  String?
+  category    String
+  authorId    String
+  author      User     @relation(fields: [authorId], references: [id])
+  authorName  String?
+  authorRole  String?
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isPublished, createdAt])
+}
+
+model HintUnlock {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  challengeId String
+  challenge   Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  hintId      String
+  cost        Int       @default(0)
+  createdAt   DateTime  @default(now())
+
+  @@unique([userId, hintId])
+}
+
+model PlatformSettings {
+  id                 String  @id @default("global")
+  isScoreboardFrozen Boolean @default(false)
+}

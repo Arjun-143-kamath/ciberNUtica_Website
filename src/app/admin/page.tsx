@@ -3,7 +3,6 @@
 import React, { useState } from 'react';
 import { useCTF } from '@/lib/store';
 import { 
-  ShieldAlert, 
   Terminal, 
   Plus, 
   Trash2, 
@@ -18,7 +17,6 @@ import {
   EyeOff,
   Radio,
   Clock,
-  UserCheck,
   Edit3,
   Zap,
   RotateCcw,
@@ -28,15 +26,14 @@ import { Challenge, ChallengeCategory, ChallengeType, FlagType } from '@/lib/typ
 
 export default function AdminPortalPage() {
   const { 
-    currentUser, 
-    loginAs, 
     challenges, 
+    refreshCtfState,
     addChallenge, 
     updateChallenge,
     deleteChallenge,
-    submitFlag,
     clearSubmissions,
     events, 
+    addEvent,
     updateEvent, 
     submissions,
     isScoreboardFrozen, 
@@ -46,6 +43,11 @@ export default function AdminPortalPage() {
   } = useCTF();
 
   const [activeTab, setActiveTab] = useState<'challenges' | 'events' | 'submissions' | 'blogs'>('challenges');
+  const ctfEvents = events.filter(event => event.type === 'CTF');
+  const [selectedCtfEventId, setSelectedCtfEventId] = useState('');
+  const selectedCtfEvent = ctfEvents.find(event => event.id === selectedCtfEventId) ?? ctfEvents[0];
+  const eventChallenges = challenges.filter(challenge => challenge.eventId === selectedCtfEvent?.id);
+  const [newCtfEvent, setNewCtfEvent] = useState({ title: '', description: '', date: '', endDate: '', startTime: '09:00', endTime: '17:00', isPublished: false });
 
   // New challenge form state
   const [showAddChalModal, setShowAddChalModal] = useState(false);
@@ -83,44 +85,12 @@ export default function AdminPortalPage() {
     hintCost: number;
   } | null>(null);
 
-  // If user is not an Admin, render an access denied barrier with quick switch
-  if (currentUser?.role !== 'ADMIN') {
-    return (
-      <div className="max-w-4xl mx-auto px-4 py-24 text-center font-mono space-y-6">
-        <div className="w-16 h-16 bg-red-950/60 border border-red-600 flex items-center justify-center text-red-500 mx-auto">
-          <ShieldAlert className="w-8 h-8" />
-        </div>
-        <div className="space-y-2">
-          <div className="text-red-500 text-xs tracking-widest uppercase">
-            [!] 403 FORBIDDEN // ACCESS RESTRICTED
-          </div>
-          <h1 className="text-3xl font-black text-white uppercase">
-            COMMAND CLEARANCE LEVEL 4 REQUIRED
-          </h1>
-          <p className="text-xs text-neutral-400 max-w-md mx-auto leading-relaxed">
-            Role-Based Access Control (RBAC) is active. The content management, CTF challenge formulation, and flag controls are restricted to administrators.
-          </p>
-        </div>
-
-        <div className="pt-4">
-          <button
-            onClick={() => loginAs('ADMIN')}
-            className="cyber-btn-yellow px-6 py-3 text-xs inline-flex items-center gap-2"
-          >
-            <UserCheck className="w-4 h-4" />
-            <span>AUTHENTICATE AS ADMIN (COMMAND STAFF)</span>
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  const handleCreateChallenge = (e: React.FormEvent) => {
+  const handleCreateChallenge = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newChal.title || !newChal.flagContent) return;
+    if (!selectedCtfEvent || !newChal.title || !newChal.flagContent) return;
 
-    addChallenge({
-      eventId: events[0]?.id || 'evt-default',
+    try { await addChallenge({
+      eventId: selectedCtfEvent.id,
       title: newChal.title,
       category: newChal.category,
       description: newChal.description,
@@ -147,7 +117,7 @@ export default function AdminPortalPage() {
           cost: Number(newChal.hintCost)
         }
       ] : []
-    });
+    }); } catch (error) { window.alert(error instanceof Error ? error.message : 'Unable to create challenge.'); return; }
 
     setShowAddChalModal(false);
     setNewChal({
@@ -168,11 +138,19 @@ export default function AdminPortalPage() {
     });
   };
 
-  const handleSaveEditedChallenge = (e: React.FormEvent) => {
+  const handleCreateCtfEvent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await addEvent({ title: newCtfEvent.title, slug: '', description: newCtfEvent.description, type: 'CTF', location: '', date: newCtfEvent.date, startDate: newCtfEvent.date, endDate: newCtfEvent.endDate || newCtfEvent.date, startTime: `${newCtfEvent.startTime} UTC`, endTime: `${newCtfEvent.endTime} UTC`, isPublished: newCtfEvent.isPublished, isLiveCTF: false });
+      setNewCtfEvent({ title: '', description: '', date: '', endDate: '', startTime: '09:00', endTime: '17:00', isPublished: false });
+    } catch (error) { window.alert(error instanceof Error ? error.message : 'Unable to create CTF event.'); }
+  };
+
+  const handleSaveEditedChallenge = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingChal || !editingChal.title) return;
 
-    updateChallenge(editingChal.id, {
+    const update: Partial<Challenge> = {
       title: editingChal.title,
       category: editingChal.category,
       description: editingChal.description,
@@ -180,7 +158,7 @@ export default function AdminPortalPage() {
       initialPoints: Number(editingChal.initialPoints),
       minPoints: Number(editingChal.minPoints),
       decaySolves: Number(editingChal.decaySolves),
-      flags: [
+      flags: editingChal.flagContent ? [
         {
           id: `f-${Date.now()}`,
           challengeId: editingChal.id,
@@ -188,7 +166,7 @@ export default function AdminPortalPage() {
           content: editingChal.flagContent,
           caseSensitive: true
         }
-      ],
+      ] : undefined,
       hints: editingChal.hintContent ? [
         {
           id: `h-${Date.now()}`,
@@ -197,7 +175,9 @@ export default function AdminPortalPage() {
           cost: Number(editingChal.hintCost)
         }
       ] : []
-    });
+    };
+    try { await updateChallenge(editingChal.id, update); }
+    catch (error) { window.alert(error instanceof Error ? error.message : 'Unable to update challenge.'); return; }
 
     setShowEditChalModal(false);
     setEditingChal(null);
@@ -206,9 +186,9 @@ export default function AdminPortalPage() {
   const handleSimulateBruteForce = () => {
     if (challenges.length === 0) return;
     const target = challenges[0];
-    for (let i = 1; i <= 6; i++) {
-      submitFlag(target.id, `ciberNUtica{simulated_guess_${i}_${Date.now().toString().slice(-4)}}`);
-    }
+    void fetch('/api/ctf/simulate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ challengeId: target.id }) })
+      .then(async response => { if (!response.ok) throw new Error(); await refreshCtfState(); })
+      .catch(() => window.alert('Unable to create simulation records.'));
   };
 
   return (
@@ -239,7 +219,7 @@ export default function AdminPortalPage() {
               </span>
             </div>
             <button
-              onClick={() => setIsScoreboardFrozen(!isScoreboardFrozen)}
+              onClick={() => { void setIsScoreboardFrozen(!isScoreboardFrozen).catch(() => window.alert('Unable to update scoreboard state.')); }}
               className="px-2.5 py-1 text-[10px] font-bold border border-[#FCEE09] text-[#FCEE09] hover:bg-[#FCEE09] hover:text-black transition"
             >
               TOGGLE FREEZE
@@ -258,7 +238,7 @@ export default function AdminPortalPage() {
               : 'border-neutral-800 bg-neutral-950 text-neutral-400 hover:text-white'
           }`}
         >
-          CTF CHALLENGE ENGINE ({challenges.length})
+          CTF EVENTS & CHALLENGES ({ctfEvents.length})
         </button>
 
         <button
@@ -303,17 +283,26 @@ export default function AdminPortalPage() {
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-white uppercase flex items-center gap-2">
               <Flame className="w-4 h-4 text-[#FCEE09]" />
-              <span>CONFIGURED CTFd CHALLENGES</span>
+              <span>CTF EVENT WORKSPACE</span>
             </h2>
 
-            <button
-              onClick={() => setShowAddChalModal(true)}
-              className="cyber-btn-yellow px-4 py-2 text-xs flex items-center gap-2"
-            >
+            <button disabled={!selectedCtfEvent} onClick={() => setShowAddChalModal(true)} className="cyber-btn-yellow px-4 py-2 text-xs flex items-center gap-2 disabled:opacity-40">
               <Plus className="w-4 h-4" />
-              <span>NEW CHALLENGE</span>
+              <span>ADD TO EVENT</span>
             </button>
           </div>
+
+          <form onSubmit={handleCreateCtfEvent} className="cyber-card grid grid-cols-1 md:grid-cols-6 gap-3 p-4 border border-[#FCEE09]/25">
+            <div className="md:col-span-2"><label className="block mb-1 text-[10px] text-neutral-400">NEW CTF EVENT</label><input required maxLength={160} placeholder="Event name" value={newCtfEvent.title} onChange={e => setNewCtfEvent({ ...newCtfEvent, title: e.target.value })} className="w-full bg-black border border-neutral-800 p-2 text-white" /></div>
+            <div className="md:col-span-2"><label className="block mb-1 text-[10px] text-neutral-400">DESCRIPTION</label><input required placeholder="What is this CTF about?" value={newCtfEvent.description} onChange={e => setNewCtfEvent({ ...newCtfEvent, description: e.target.value })} className="w-full bg-black border border-neutral-800 p-2 text-white" /></div>
+            <div><label className="block mb-1 text-[10px] text-neutral-400">DATE (UTC)</label><input required type="date" value={newCtfEvent.date} onChange={e => setNewCtfEvent({ ...newCtfEvent, date: e.target.value })} className="w-full bg-black border border-neutral-800 p-2 text-white" /></div>
+            <div><label className="block mb-1 text-[10px] text-neutral-400">END DATE (UTC)</label><input type="date" min={newCtfEvent.date} value={newCtfEvent.endDate} onChange={e => setNewCtfEvent({ ...newCtfEvent, endDate: e.target.value })} className="w-full bg-black border border-neutral-800 p-2 text-white" /></div>
+            <div className="grid grid-cols-2 gap-2"><div><label className="block mb-1 text-[10px] text-neutral-400">START</label><input required type="time" value={newCtfEvent.startTime} onChange={e => setNewCtfEvent({ ...newCtfEvent, startTime: e.target.value })} className="w-full bg-black border border-neutral-800 p-2 text-white" /></div><div><label className="block mb-1 text-[10px] text-neutral-400">END</label><input required type="time" value={newCtfEvent.endTime} onChange={e => setNewCtfEvent({ ...newCtfEvent, endTime: e.target.value })} className="w-full bg-black border border-neutral-800 p-2 text-white" /></div></div>
+            <label className="md:col-span-5 flex items-center gap-2 text-[11px] text-neutral-300"><input type="checkbox" checked={newCtfEvent.isPublished} onChange={e => setNewCtfEvent({ ...newCtfEvent, isPublished: e.target.checked })} /> Visible to participants when created</label>
+            <button className="cyber-btn-yellow px-3 py-2 text-xs">INITIATE CTF</button>
+          </form>
+
+          {ctfEvents.length > 0 ? <div className="space-y-3"><label className="block text-xs text-neutral-400">SELECT CTF EVENT</label><select value={selectedCtfEvent?.id ?? ''} onChange={e => setSelectedCtfEventId(e.target.value)} className="w-full max-w-xl bg-black border border-[#FCEE09]/40 p-3 text-white">{ctfEvents.map(event => <option key={event.id} value={event.id}>{event.title} — {event.date}</option>)}</select><div className="flex flex-wrap items-center gap-3 text-xs text-neutral-400"><span>{selectedCtfEvent?.date} · {selectedCtfEvent?.startTime}–{selectedCtfEvent?.endTime}</span><button onClick={() => selectedCtfEvent && void updateEvent(selectedCtfEvent.id, { isPublished: !selectedCtfEvent.isPublished }).catch(() => window.alert('Unable to update event visibility.'))} className="px-3 py-1 border border-neutral-700 hover:border-[#FCEE09]">{selectedCtfEvent?.isPublished ? 'HIDE FROM USERS' : 'PUBLISH EVENT'}</button><button onClick={() => selectedCtfEvent && void updateEvent(selectedCtfEvent.id, { isLiveCTF: !selectedCtfEvent.isLiveCTF }).catch(() => window.alert('Unable to update event state.'))} className="px-3 py-1 border border-neutral-700 hover:border-emerald-400">{selectedCtfEvent?.isLiveCTF ? 'CLOSE SUBMISSIONS' : 'OPEN SUBMISSIONS'}</button></div></div> : <p className="border border-neutral-800 p-6 text-sm text-neutral-400">Create a CTF event above before adding challenges.</p>}
 
           <div className="cyber-card border border-neutral-800 overflow-x-auto">
             <table className="w-full text-left text-xs">
@@ -328,7 +317,7 @@ export default function AdminPortalPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-850">
-                {challenges.map((c) => (
+                {eventChallenges.map((c) => (
                   <tr key={c.id} className="hover:bg-neutral-900/50">
                     <td className="py-3.5 px-4 font-bold text-white">
                       {c.title}
@@ -355,6 +344,9 @@ export default function AdminPortalPage() {
                       {c.flags[0]?.content || 'PROTECTED'}
                     </td>
                     <td className="py-3.5 px-4 text-right space-x-2">
+                      <button onClick={() => { void updateChallenge(c.id, { state: c.state === 'visible' ? 'hidden' : 'visible' }).catch(() => window.alert('Unable to update challenge visibility.')); }} className="text-neutral-400 hover:text-[#FCEE09] p-1 inline-block" title={c.state === 'visible' ? 'Hide from participants' : 'Show to participants'}>
+                        {c.state === 'visible' ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
                       <button
                         onClick={() => {
                           setEditingChal({
@@ -379,7 +371,7 @@ export default function AdminPortalPage() {
                         <Edit3 className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={() => deleteChallenge(c.id)}
+                        onClick={() => { void deleteChallenge(c.id).catch(() => window.alert('Unable to delete challenge.')); }}
                         className="text-red-400 hover:text-red-300 p-1 inline-block"
                         title="Delete Challenge"
                       >
@@ -420,7 +412,7 @@ export default function AdminPortalPage() {
                 <span>SIMULATE BRUTE FORCE</span>
               </button>
               <button
-                onClick={clearSubmissions}
+                onClick={() => { void clearSubmissions().catch(() => window.alert('Unable to clear the audit log.')); }}
                 disabled={submissions.length === 0}
                 className="px-3 py-1.5 text-xs border border-red-800 bg-red-950/40 text-red-300 hover:bg-red-900/60 disabled:opacity-40 flex items-center gap-1.5 transition cursor-pointer"
               >
@@ -437,7 +429,7 @@ export default function AdminPortalPage() {
                   <th className="py-3 px-4">TIMESTAMP</th>
                   <th className="py-3 px-4">COMPETITOR</th>
                   <th className="py-3 px-4">CHALLENGE</th>
-                  <th className="py-3 px-4">SUBMITTED VALUE</th>
+                  <th className="py-3 px-4">FLAG FINGERPRINT</th>
                   <th className="py-3 px-4 text-right">VERDICT</th>
                 </tr>
               </thead>
@@ -445,7 +437,7 @@ export default function AdminPortalPage() {
                 {submissions.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="py-6 text-center text-neutral-500">
-                      No active submissions recorded yet in this session.
+                      No submission records yet.
                     </td>
                   </tr>
                 ) : (
@@ -503,7 +495,7 @@ export default function AdminPortalPage() {
                     {evt.type}
                   </span>
                   <button
-                    onClick={() => updateEvent(evt.id, { isLiveCTF: !evt.isLiveCTF })}
+                    onClick={() => { void updateEvent(evt.id, { isLiveCTF: !evt.isLiveCTF }).catch(() => window.alert('Unable to update event.')); }}
                     className={`px-3 py-1 text-xs font-bold border transition ${
                       evt.isLiveCTF
                         ? 'border-emerald-500 bg-emerald-950/40 text-emerald-400'
@@ -519,6 +511,14 @@ export default function AdminPortalPage() {
                 <div className="text-[11px] text-neutral-500">
                   DATE: {evt.date} // TIME: {evt.startTime} - {evt.endTime}
                 </div>
+                {evt.type === 'CTF' && <form onSubmit={e => { e.preventDefault(); const fields = new FormData(e.currentTarget); void updateEvent(evt.id, { date: String(fields.get('date')), endDate: String(fields.get('endDate')), startTime: `${String(fields.get('start'))} UTC`, endTime: `${String(fields.get('end'))} UTC` }).catch(() => window.alert('Unable to update CTF schedule.')); }} className="grid grid-cols-2 gap-2">
+                  <input aria-label="CTF start date" required type="date" name="date" defaultValue={evt.startDate} className="bg-black border border-neutral-800 p-2 text-white text-xs" />
+                  <input aria-label="CTF end date" required type="date" name="endDate" min={evt.startDate} defaultValue={evt.endDate} className="bg-black border border-neutral-800 p-2 text-white text-xs" />
+                  <input aria-label="CTF start time" required type="time" name="start" defaultValue={evt.startTime.slice(0, 5)} className="bg-black border border-neutral-800 p-2 text-white text-xs" />
+                  <input aria-label="CTF end time" required type="time" name="end" defaultValue={evt.endTime.slice(0, 5)} className="bg-black border border-neutral-800 p-2 text-white text-xs" />
+                  <button className="col-span-2 px-3 py-1 text-xs border border-neutral-700 text-neutral-300 hover:border-[#FCEE09]">SAVE CTF SCHEDULE</button>
+                </form>}
+                <button onClick={() => { void updateEvent(evt.id, { isPublished: !evt.isPublished }).catch(() => window.alert('Unable to update event visibility.')); }} className="px-3 py-1 text-xs font-bold border border-neutral-700 text-neutral-300 hover:border-[#FCEE09]">{evt.isPublished ? 'VISIBLE TO USERS — HIDE' : 'HIDDEN — PUBLISH'}</button>
               </div>
             ))}
           </div>
@@ -555,7 +555,7 @@ export default function AdminPortalPage() {
                     <td className="py-3 px-4 text-neutral-500">{b.publishedAt}</td>
                     <td className="py-3 px-4 text-right">
                       <button
-                        onClick={() => deleteBlogPost(b.id)}
+                        onClick={() => { void deleteBlogPost(b.id).catch(() => window.alert('Unable to delete this dispatch. Please try again.')); }}
                         className="text-red-400 hover:text-red-300 p-1"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -686,10 +686,9 @@ export default function AdminPortalPage() {
                     <label className="text-neutral-400 block mb-1">SECRET FLAG</label>
                     <input
                       type="text"
-                      required
                       value={editingChal.flagContent}
                       onChange={(e) => setEditingChal({ ...editingChal, flagContent: e.target.value })}
-                      placeholder="ciberNUtica{...}"
+                      placeholder="Leave blank to keep the current flag"
                       className="w-full bg-black border border-neutral-800 p-2 text-white outline-none"
                     />
                   </div>

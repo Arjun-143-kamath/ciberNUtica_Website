@@ -47,6 +47,10 @@ export default function EventsAndCTFPage() {
   // Tab: 'arena' (CTF Challenges & Scoreboard) vs 'operations' (Workshops, Sessions, Upcoming & Past)
   const [activeTab, setActiveTab] = useState<'arena' | 'operations' | 'scoreboard'>('arena');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
+  const ctfEvents = events.filter(event => event.type === 'CTF' && event.isPublished);
+  const [selectedCtfEventId, setSelectedCtfEventId] = useState('');
+  const selectedCtfEvent = ctfEvents.find(event => event.id === selectedCtfEventId) ?? ctfEvents[0];
+  const ctfSubmissionsOpen = Boolean(selectedCtfEvent?.isLiveCTF && Date.now() >= Date.parse(`${selectedCtfEvent.startDate}T${selectedCtfEvent.startTime.slice(0, 5)}:00Z`) && Date.now() <= Date.parse(`${selectedCtfEvent.endDate ?? selectedCtfEvent.startDate}T${selectedCtfEvent.endTime.slice(0, 5)}:00Z`));
   const [activeChallenge, setActiveChallenge] = useState<Challenge | null>(null);
   const [flagInput, setFlagInput] = useState<string>('');
   const [submissionFeedback, setSubmissionFeedback] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
@@ -80,9 +84,16 @@ export default function EventsAndCTFPage() {
   ];
 
   const filteredChallenges = challenges.filter(c => {
+    if (!selectedCtfEvent || c.eventId !== selectedCtfEvent.id) return false;
     if (selectedCategory === 'ALL') return true;
     return c.category === selectedCategory;
   });
+  const currentEventChallengeIds = new Set(challenges.filter(challenge => challenge.eventId === selectedCtfEvent?.id).map(challenge => challenge.id));
+  const eventScoreboard = scoreboard.map(entry => {
+    const eventSolves = entry.solves.filter(solve => currentEventChallengeIds.has(solve.challengeId));
+    const hintPenalty = unlockedHints.filter(unlock => unlock.userId === entry.userId && currentEventChallengeIds.has(unlock.challengeId)).reduce((sum, unlock) => sum + unlock.cost, 0);
+    return { ...entry, solves: eventSolves, solvesCount: eventSolves.length, totalScore: Math.max(0, eventSolves.reduce((sum, solve) => sum + solve.points, 0) - hintPenalty), lastSolveTime: [...eventSolves].sort((a, b) => Date.parse(b.solvedAt) - Date.parse(a.solvedAt))[0]?.solvedAt };
+  }).filter(entry => entry.solvesCount > 0).sort((a, b) => b.totalScore - a.totalScore || Date.parse(a.lastSolveTime ?? '') - Date.parse(b.lastSolveTime ?? '')).map((entry, index) => ({ ...entry, rank: index + 1 }));
 
   // Solve checker
   const isSolvedByCurrentUser = (challengeId: string) => {
@@ -94,14 +105,16 @@ export default function EventsAndCTFPage() {
     return solves.filter(s => s.challengeId === challengeId).length;
   };
 
-  const handleFlagSubmit = (e: React.FormEvent) => {
+  const handleFlagSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeChallenge || !flagInput.trim()) return;
 
     setIsSubmitting(true);
     setSubmissionFeedback(null);
 
-    const result = submitFlag(activeChallenge.id, flagInput);
+    let result: Awaited<ReturnType<typeof submitFlag>>;
+    try { result = await submitFlag(activeChallenge.id, flagInput); }
+    catch { result = { success: false, message: 'SUBMISSION_FAILED: Unable to reach the CTF service.' }; }
 
     if (result.success) {
       setSubmissionFeedback({ type: 'success', message: result.message });
@@ -120,11 +133,11 @@ export default function EventsAndCTFPage() {
     setIsSubmitting(false);
   };
 
-  const handleHintUnlock = (hintId: string, cost: number) => {
+  const handleHintUnlock = async (hintId: string, cost: number) => {
     if (!activeChallenge) return;
     const confirmed = window.confirm(`Unlocking this tactical hint will deduct ${cost} points from your score upon solve. Proceed?`);
     if (confirmed) {
-      const res = unlockHint(activeChallenge.id, hintId, cost);
+      const res = await unlockHint(activeChallenge.id, hintId, cost);
       setSubmissionFeedback({ type: res.success ? 'info' : 'error', message: res.message });
     }
   };
@@ -132,10 +145,10 @@ export default function EventsAndCTFPage() {
   const handleCreateEvent = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newEvent.title) return;
-    addEvent({
+    void addEvent({
       ...newEvent,
       slug: newEvent.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')
-    });
+    }).catch(error => window.alert(error instanceof Error ? error.message : 'Unable to add event.'));
     setShowAddEventModal(false);
     setNewEvent({
       title: '',
@@ -156,57 +169,57 @@ export default function EventsAndCTFPage() {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-10">
       
       {/* Top Banner / Tactical Header */}
-      <div className="border border-[#FCEE09]/30 bg-neutral-950 p-6 sm:p-8 relative">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="border border-[#FCEE09]/30 bg-neutral-950 p-5 sm:p-7 relative">
+        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5">
           <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 text-xs font-mono text-[#FCEE09] uppercase tracking-widest">
-              <span className="w-2 h-2 bg-[#FCEE09] animate-pulse"></span>
-              SEC.EVENT_OPS // CTFd WARFARE ENGINE
+            <div className="inline-flex items-center gap-2 text-[10px] font-mono text-[#FCEE09] uppercase tracking-widest">
+              <span className="w-2 h-2 bg-[#FCEE09]"></span>
+              EVENTS // COMPETITIONS
             </div>
             <h1 className="text-3xl sm:text-4xl font-mono font-black text-white uppercase tracking-tight">
               OPERATIONS & CTF ARENA
             </h1>
-            <p className="text-xs font-mono text-neutral-400 max-w-2xl leading-relaxed">
-              Live jeopardy-style cyber warfare platform with CTFd dynamic decay mathematics. Participate in active competitions, capture encrypted flags, or browse past workshops and club sessions.
+            <p className="text-xs font-mono text-neutral-400 max-w-xl leading-relaxed">
+              Compete in CTFs, track scores, and explore upcoming events.
             </p>
           </div>
 
           {/* Action Tabs */}
-          <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
+          <div className="grid w-full grid-cols-3 gap-2 font-mono text-[10px] sm:text-xs xl:w-[450px] xl:shrink-0">
             <button
               onClick={() => setActiveTab('arena')}
-              className={`px-4 py-2.5 font-bold transition flex items-center gap-2 cursor-pointer ${
+              className={`justify-center px-2 py-2.5 font-bold transition flex items-center gap-1.5 cursor-pointer ${
                 activeTab === 'arena'
                   ? 'bg-[#FCEE09] text-black'
                   : 'bg-neutral-900 text-neutral-300 border border-neutral-800 hover:border-[#FCEE09]/40'
               }`}
             >
-              <Flame className="w-4 h-4" />
-              <span>CTF CHALLENGES</span>
+              <Flame className="w-3.5 h-3.5 shrink-0" />
+              <span>CTF ARENA</span>
             </button>
 
             <button
               onClick={() => setActiveTab('scoreboard')}
-              className={`px-4 py-2.5 font-bold transition flex items-center gap-2 cursor-pointer ${
+              className={`justify-center px-2 py-2.5 font-bold transition flex items-center gap-1.5 cursor-pointer ${
                 activeTab === 'scoreboard'
                   ? 'bg-[#FCEE09] text-black'
                   : 'bg-neutral-900 text-neutral-300 border border-neutral-800 hover:border-[#FCEE09]/40'
               }`}
             >
-              <Trophy className="w-4 h-4" />
-              <span>LIVE LEADERBOARD</span>
+              <Trophy className="w-3.5 h-3.5 shrink-0" />
+              <span>SCOREBOARD</span>
             </button>
 
             <button
               onClick={() => setActiveTab('operations')}
-              className={`px-4 py-2.5 font-bold transition flex items-center gap-2 cursor-pointer ${
+              className={`justify-center px-2 py-2.5 font-bold transition flex items-center gap-1.5 cursor-pointer ${
                 activeTab === 'operations'
                   ? 'bg-[#FCEE09] text-black'
                   : 'bg-neutral-900 text-neutral-300 border border-neutral-800 hover:border-[#FCEE09]/40'
               }`}
             >
-              <Calendar className="w-4 h-4" />
-              <span>ALL EVENTS & SESSIONS</span>
+              <Calendar className="w-3.5 h-3.5 shrink-0" />
+              <span>EVENTS</span>
             </button>
           </div>
         </div>
@@ -218,49 +231,46 @@ export default function EventsAndCTFPage() {
       {activeTab === 'arena' && (
         <div className="space-y-8">
           
-          {/* Top Control Strip */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-[#FCEE09]/20 pb-4">
-            
-            {/* Category Filter Pills */}
-            <div className="flex flex-wrap items-center gap-2">
-              {categories.map((cat) => (
-                <button
-                  key={cat}
-                  onClick={() => setSelectedCategory(cat)}
-                  className={`px-3 py-1.5 text-xs font-mono font-bold uppercase transition ${
-                    selectedCategory === cat
-                      ? 'border border-[#FCEE09] bg-[#FCEE09]/15 text-[#FCEE09]'
-                      : 'border border-neutral-800 bg-neutral-950 text-neutral-400 hover:text-white'
-                  }`}
-                >
-                  {cat}
-                </button>
-              ))}
+          {/* Competition and challenge filters */}
+          <div className="space-y-4 border-b border-[#FCEE09]/20 pb-5">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <div className="flex w-full max-w-xl flex-col gap-2">
+                <label htmlFor="ctf-event-select" className="text-[10px] font-mono tracking-wider text-neutral-500">COMPETITION</label>
+                <select id="ctf-event-select" value={selectedCtfEvent?.id ?? ''} onChange={e => setSelectedCtfEventId(e.target.value)} disabled={ctfEvents.length === 0} className="w-full min-w-0 bg-black border border-[#FCEE09]/40 px-3 py-2.5 text-xs text-white">
+                {ctfEvents.length === 0 ? <option value="">NO PUBLISHED CTF EVENTS</option> : ctfEvents.map(event => <option key={event.id} value={event.id}>{event.title}</option>)}
+                </select>
+              </div>
+              <div className="shrink-0 text-[11px] font-mono uppercase text-neutral-500">
+                <span className="text-[#FCEE09]">{filteredChallenges.length}</span> {filteredChallenges.length === 1 ? 'CHALLENGE' : 'CHALLENGES'}
+              </div>
             </div>
-
-            {/* Quick Status */}
-            <div className="text-xs font-mono text-neutral-400 flex items-center gap-3">
-              <span>{filteredChallenges.length} Challenges</span>
-              <span>•</span>
-              <span className="text-[#FCEE09]">
-                User: {currentUser ? currentUser.username : 'GUEST (Click Authenticate)'}
-              </span>
-            </div>
-          </div>
-
-          {/* Dynamic Decay Notice Box */}
-          <div className="p-4 bg-neutral-950/80 border border-[#FCEE09]/20 text-xs font-mono text-neutral-400 flex items-start gap-3">
-            <Zap className="w-4 h-4 text-[#FCEE09] shrink-0 mt-0.5" />
-            <div>
-              <span className="text-white font-bold">CTFd Dynamic Scoring Active:</span> Challenges marked with <span className="text-[#FCEE09] font-bold">DYNAMIC</span> decay in points as more operatives solve them:
-              <code className="text-[#FCEE09] ml-1 bg-black px-1.5 py-0.5 border border-neutral-800">
-                Points = max(min, ceil(((min - initial)/decay²) * solves² + initial))
-              </code>. Solve early to secure maximum scoreboard advantage!
+            <div className="space-y-2">
+              <div className="text-[10px] font-mono tracking-wider text-neutral-500">FILTER BY CATEGORY</div>
+              <div className="flex flex-wrap gap-2">
+                {categories.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setSelectedCategory(cat)}
+                    className={`px-3 py-1.5 text-[11px] font-mono font-bold uppercase transition ${
+                      selectedCategory === cat
+                        ? 'border border-[#FCEE09] bg-[#FCEE09]/15 text-[#FCEE09]'
+                        : 'border border-neutral-800 bg-neutral-950 text-neutral-400 hover:text-white'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
+
+          {selectedCtfEvent && <div className="flex flex-wrap items-center justify-between gap-3 border border-neutral-800 bg-neutral-950 p-4 text-xs font-mono">
+            <div><div className="font-bold text-white">{selectedCtfEvent.title}</div><div className="mt-1 text-neutral-500">{selectedCtfEvent.date} // {selectedCtfEvent.startTime}–{selectedCtfEvent.endTime}</div></div>
+            <span className={ctfSubmissionsOpen ? 'text-emerald-400' : 'text-amber-400'}>{ctfSubmissionsOpen ? 'SUBMISSIONS OPEN' : 'CHALLENGES VISIBLE · SUBMISSIONS CLOSED'}</span>
+          </div>}
 
           {/* Challenges Cards Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {selectedCtfEvent && <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredChallenges.map((chal) => {
               const solved = isSolvedByCurrentUser(chal.id);
               const solveCount = getChallengeSolvesCount(chal.id);
@@ -322,7 +332,8 @@ export default function EventsAndCTFPage() {
                 </div>
               );
             })}
-          </div>
+          </div>}
+          {!selectedCtfEvent && <div className="border border-neutral-800 bg-neutral-950 p-10 text-center text-sm text-neutral-400">No CTF event is currently published. Check back when the next competition is announced.</div>}
 
         </div>
       )}
@@ -338,10 +349,10 @@ export default function EventsAndCTFPage() {
             <div>
               <h2 className="text-xl font-mono font-bold text-white uppercase flex items-center gap-2">
                 <Trophy className="w-5 h-5 text-[#FCEE09]" />
-                LIVE CTF SCOREBOARD
+                {selectedCtfEvent ? `${selectedCtfEvent.title} SCOREBOARD` : 'CTF SCOREBOARD'}
               </h2>
               <div className="text-xs font-mono text-neutral-400 mt-1">
-                Official tie-breaker enabled: Points rank first; microsecond timestamp tie-breaker applies.
+                Event-scoped standings · Points rank first; solve timestamp breaks ties.
               </div>
             </div>
 
@@ -350,7 +361,7 @@ export default function EventsAndCTFPage() {
               <div className="flex items-center gap-3 bg-neutral-950 border border-neutral-800 p-2 text-xs font-mono">
                 <span className="text-neutral-400">SCOREBOARD STATE:</span>
                 <button
-                  onClick={() => setIsScoreboardFrozen(!isScoreboardFrozen)}
+                  onClick={() => { void setIsScoreboardFrozen(!isScoreboardFrozen).catch(() => window.alert('Unable to update scoreboard state.')); }}
                   className={`px-2.5 py-1 font-bold ${
                     isScoreboardFrozen
                       ? 'bg-red-600 text-white'
@@ -373,10 +384,12 @@ export default function EventsAndCTFPage() {
             </div>
           )}
 
+          {ctfEvents.length > 0 && <div className="flex items-center gap-3 text-xs font-mono text-neutral-400"><label htmlFor="scoreboard-event">EVENT</label><select id="scoreboard-event" value={selectedCtfEvent?.id ?? ''} onChange={e => setSelectedCtfEventId(e.target.value)} className="bg-black border border-neutral-800 px-3 py-2 text-white">{ctfEvents.map(event => <option key={event.id} value={event.id}>{event.title}</option>)}</select></div>}
+
           {/* Top 3 Podium Highlights */}
-          {scoreboard.length > 0 && (
+          {eventScoreboard.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {scoreboard.slice(0, 3).map((podium) => {
+              {eventScoreboard.slice(0, 3).map((podium) => {
                 const isFirst = podium.rank === 1;
                 const isSecond = podium.rank === 2;
                 return (
@@ -432,7 +445,7 @@ export default function EventsAndCTFPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-850">
-                {scoreboard.map((entry) => {
+                {eventScoreboard.map((entry) => {
                   const isUser = currentUser?.id === entry.userId;
                   return (
                     <tr
@@ -501,6 +514,7 @@ export default function EventsAndCTFPage() {
               </tbody>
             </table>
           </div>
+          {eventScoreboard.length === 0 && <div className="border border-neutral-800 p-8 text-center text-sm text-neutral-400">No scores have been recorded for this CTF event yet.</div>}
 
         </div>
       )}
@@ -793,7 +807,6 @@ export default function EventsAndCTFPage() {
                     <option value="WORKSHOP">WORKSHOP</option>
                     <option value="SESSION">SESSION</option>
                     <option value="TALK">SPEAKER TALK</option>
-                    <option value="CTF">CTF COMPETITION</option>
                   </select>
                 </div>
                 <div>
@@ -844,19 +857,6 @@ export default function EventsAndCTFPage() {
                   placeholder="Overview of the technical agenda..."
                   className="w-full bg-black border border-neutral-800 p-2 text-white focus:border-[#FCEE09] outline-none"
                 />
-              </div>
-
-              <div className="flex items-center gap-2 pt-2">
-                <input
-                  type="checkbox"
-                  id="liveCTFToggle"
-                  checked={newEvent.isLiveCTF}
-                  onChange={(e) => setNewEvent({ ...newEvent, isLiveCTF: e.target.checked })}
-                  className="accent-[#FCEE09]"
-                />
-                <label htmlFor="liveCTFToggle" className="text-white cursor-pointer">
-                  Enable Live CTF Arena for this event
-                </label>
               </div>
 
               <button

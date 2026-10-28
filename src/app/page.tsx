@@ -21,8 +21,9 @@ import {
 export default function HomePage() {
   const { events, blogs, scoreboard, challenges } = useCTF();
 
-  // Highlighted live or next CTF event
-  const liveCTFEvent = events.find(e => e.isLiveCTF) || events[0];
+  // Highlight a published CTF event when one exists; the home page also loads before events are available.
+  const featuredCTFEvent = events.find(event => event.type === 'CTF' && event.isLiveCTF)
+    ?? events.find(event => event.type === 'CTF');
   const recentBlogs = blogs.slice(0, 3);
   const totalSolves = scoreboard.reduce((sum, s) => sum + s.solvesCount, 0);
 
@@ -166,46 +167,44 @@ export default function HomePage() {
         </div>
 
         {/* HUB 1: EVENTS & CTF ARENA BRIEF */}
-        <div className="cyber-card p-6 sm:p-8 border border-[#FCEE09]/30">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-            <div className="space-y-3 max-w-2xl">
-              <div className="inline-flex items-center gap-2 text-xs font-mono text-[#FCEE09] font-bold uppercase">
-                <Flame className="w-4 h-4 text-[#FCEE09]" />
-                <span>ACTIVE OPERATION & CTF TEASER</span>
+        {featuredCTFEvent ? (
+          <div className="cyber-card p-6 sm:p-8 border border-[#FCEE09]/30">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+              <div className="space-y-3 max-w-2xl">
+                <div className="inline-flex items-center gap-2 text-xs font-mono text-[#FCEE09] font-bold uppercase">
+                  <Flame className="w-4 h-4 text-[#FCEE09]" />
+                  <span>CTF EVENT</span>
+                </div>
+                <h3 className="text-xl sm:text-2xl font-mono font-bold text-white uppercase">
+                  {featuredCTFEvent.title}
+                </h3>
+                <p className="font-mono text-xs text-neutral-400 leading-relaxed">
+                  {featuredCTFEvent.description}
+                </p>
+                <div className="text-xs font-mono text-neutral-300 pt-2">
+                  DATE: {featuredCTFEvent.date}
+                </div>
               </div>
-              <h3 className="text-xl sm:text-2xl font-mono font-bold text-white uppercase">
-                {liveCTFEvent.title}
-              </h3>
-              <p className="font-mono text-xs text-neutral-400 leading-relaxed">
-                {liveCTFEvent.description}
-              </p>
-              <div className="flex flex-wrap items-center gap-4 text-xs font-mono text-neutral-300 pt-2">
-                <span className="px-2 py-1 bg-neutral-900 border border-neutral-700">
-                  DATE: {liveCTFEvent.date}
-                </span>
-                <span className="px-2 py-1 bg-neutral-900 border border-neutral-700">
-                  MODE: CTFd DYNAMIC DECAY
-                </span>
-                <span className="px-2 py-1 bg-yellow-950 text-[#FCEE09] border border-[#FCEE09]/40">
-                  STATUS: LIVE ARENA READY
-                </span>
-              </div>
-            </div>
 
-            <div className="flex flex-col sm:flex-row lg:flex-col gap-3 min-w-[200px]">
               <Link
                 href="/events"
-                className="cyber-btn-yellow px-5 py-3 text-xs text-center flex items-center justify-center gap-2"
+                className="cyber-btn-yellow px-5 py-3 text-xs text-center flex items-center justify-center gap-2 lg:min-w-[200px]"
               >
-                <span>LAUNCH ARENA</span>
+                <span>VIEW CTF</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </Link>
-              <div className="text-[10px] font-mono text-neutral-500 text-center">
-                Real-time scoreboard & flag validation
-              </div>
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="cyber-card p-6 sm:p-8 border border-[#FCEE09]/20 flex flex-col sm:flex-row sm:items-center justify-between gap-5">
+            <div className="space-y-2">
+              <div className="text-xs font-mono font-bold text-[#FCEE09] uppercase">CTF ARENA</div>
+              <h3 className="text-xl font-mono font-bold text-white uppercase">No CTF event announced</h3>
+              <p className="font-mono text-xs text-neutral-400">Check the events page for upcoming competitions.</p>
+            </div>
+            <Link href="/events" className="cyber-btn-outline px-5 py-3 text-xs text-center">VIEW EVENTS</Link>
+          </div>
+        )}
 
         {/* HUB 2: BLOG / INTEL DISPATCHES BRIEF */}
         <div className="space-y-6">
@@ -272,11 +271,9 @@ export default function HomePage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
                 <div className="p-3 bg-neutral-950 border border-neutral-800">
                   <div className="text-xs font-mono font-bold text-white">Rishi Bhargava</div>
-                  <div className="text-[10px] font-mono text-[#FCEE09]">Threat Operations & Red Teaming Lead</div>
                 </div>
                 <div className="p-3 bg-neutral-950 border border-neutral-800">
                   <div className="text-xs font-mono font-bold text-white">Arjun R Kamath</div>
-                  <div className="text-[10px] font-mono text-[#FCEE09]">Systems & Cryptography Lead</div>
                 </div>
               </div>
             </div>

@@ -77,6 +77,9 @@ graph TD
 * **Authentication**: NextAuth.js (Auth.js) with JWT sessions stored in encrypted, HttpOnly, SameSite=Strict cookies.
 * **Real-time Leaderboard**: Server-Sent Events (SSE) or WebSockets with Redis Pub/Sub for instant scoreboard broadcasts.
 
+### Current Implementation Note (October 2026)
+PostgreSQL and Prisma are configured. Accounts, blogs, events, challenges, flags, hints, submissions, solves, hint unlocks, and scoreboard freeze state use PostgreSQL. Flag submissions are checked on the server, static flags are pepper-hashed, solve insertion is transactional, and the public state endpoint does not expose flag values. Account passwords use scrypt. Seed the initial administrator and platform content with `npm run db:seed`.
+
 ---
 
 ## 3. Page-by-Page Feature Specifications
@@ -95,6 +98,11 @@ graph TD
   * High-contrast metrics counter strip (e.g., `450+ Active Flags`, `12 CTFs Hosted`, `200+ Members`, `99.9% Uptime`).
 
 ### 3.2 Events & CTF Hub (`/events`)
+* **Event-Based CTF Lifecycle**:
+  * Admins create a CTF event before adding challenges, with a scheduled UTC start/end window and an independent publication setting.
+  * Challenges are attached to one CTF event and managed from that event's admin workspace; each challenge can be hidden or shown independently.
+  * Competitors select a published CTF event to view its challenges and event-scoped scoreboard. Flag submissions are accepted only when the event is published, marked live, and within its configured time window.
+  * Unpublished events and their challenge content are excluded from public APIs. Admin event reads include drafts.
 * **Dual-Mode Event Feed**:
   1. **Upcoming Operations**: Scheduled workshops, guest sessions, and teaser cards for upcoming CTFs with registration buttons.
   2. **Past Operations Archive**: Gallery and logs of past hackathons, speaker events, and club sessions with photo summaries.
@@ -119,14 +127,17 @@ graph TD
   * Markdown editor with live preview, tag management, cover banner uploader, and draft/published toggle.
 
 ### 3.4 About Page (`/about`)
+* **About ciberNUtica and NIIT University**:
+  * Briefly introduce the cybersecurity club and its focus areas.
+  * Describe NIIT University and its Neemrana campus context.
 * **Club Dossier**:
   * Origin story of **ciberNUtica**, club core pillars, and campus mission.
   * Technical domains: Red Teaming, Blue Teaming, Cryptography, DevSecOps.
 * **Leadership Showcase**:
-  * Dedicated high-tech profile cards for the two current coordinators:
+  * Compact profiles for the two current coordinators:
     * **Rishi Bhargava** — *Coordinator / Threat Intelligence & Operations*
     * **Arjun R Kamath** — *Coordinator / Systems Security & Infrastructure*
-  * Cards styled with cyber HUD frames, security clearance badges, GitHub/LinkedIn handles, and bios.
+  * Profiles keep coordinator cards simple, showing names and social links without secondary labels, biography paragraphs, or focus-area tags.
 * **Join / Contact Terminal**:
   * Interactive terminal-style command line form to submit inquiries or apply to join the club.
 
